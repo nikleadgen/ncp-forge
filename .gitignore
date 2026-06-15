@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Observation logs — daily NDJSON files, not the structure
+.claude/observations/*.ndjson
+
+# Local-only Claude Code settings
+.claude/settings.local.json
+.CLAUDE.local.md
+
+# Editor / OS junk
+.vscode/
+.idea/
+*.swp
+*~

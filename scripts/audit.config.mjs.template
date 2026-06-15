@@ -1,0 +1,113 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// audit.config.mjs — the PER-BUSINESS slot for the content-launch gate.
+//
+// This is the ONLY file in the content-launch pipeline that changes per business.
+// `scripts/seo-audit.mjs` and `scripts/validate-build.mjs` are business-agnostic and
+// import everything below; they never get edited. Tune this file to your site, leave
+// the gate scripts alone.
+//
+// BOOTSTRAP: copied in as `audit.config.mjs.template`. The bootstrap-project skill
+// renames it to `audit.config.mjs` and fills in your real page types / word counts /
+// schema nodes. The values below are a WORKED EXAMPLE from a Phoenix mold-removal
+// rank-and-rent site (mold-pros-phoenix) — replace them, don't ship them as-is.
+//
+// Each export is one per-business decision:
+//   DIST        where the build lands (rarely changes)
+//   pageType()  maps every built route → a type bucket
+//   WORD_MIN    minimum word count per type (soft check → warn, never hard-fail)
+//   SCHEMA_REQ  REQUIRED JSON-LD @type nodes per type ← this is where sites DIVERGE
+//   REQ         which checks HARD-FAIL (block the deploy) per type
+//   GUIDES_DIR  (optional) where guide source files live, for the red-team gate
+//   LEDGER      (optional) path to the red-team PASS ledger
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Build output directory. Astro static → 'dist'. Leave as-is unless your framework
+// emits HTML somewhere else.
+export const DIST = 'dist';
+
+// ── pageType(route) → bucket ─────────────────────────────────────────────────
+// Maps a built route (e.g. '/mesa-mold-removal/') to one of YOUR page-type buckets.
+// The audit looks up WORD_MIN / SCHEMA_REQ / REQ by the returned bucket name.
+// Return 'skip' for any route that should not be audited (thank-you, 404, etc.).
+//
+// Rewrite the matchers for YOUR url architecture. The example below encodes:
+//   home  →  '/'
+//   guidehub → the '/guides/' index
+//   guide →  any '/guides/<topic>/'
+//   city  →  '/<city>-mold-removal/'  (the money page pattern — change the suffix)
+//   service → the fixed service routes
+//   cost  →  '/<service>-cost/'
+//   info  →  about / how-it-works / contact
+//   legal →  privacy / terms
+export function pageType(route) {
+  if (route === '/') return 'home';
+  if (route === '/guides/') return 'guidehub';
+  if (route.startsWith('/guides/')) return 'guide';
+  if (/-mold-removal\/$/.test(route)) return 'city';
+  if (['/mold-removal/', '/mold-remediation/', '/mold-inspection/', '/water-damage-restoration/'].includes(route)) return 'service';
+  if (route === '/mold-removal-cost/') return 'cost';
+  if (['/about/', '/how-it-works/', '/contact/'].includes(route)) return 'info';
+  if (['/privacy-policy/', '/terms/'].includes(route)) return 'legal';
+  return 'skip';
+}
+
+// ── WORD_MIN ─────────────────────────────────────────────────────────────────
+// Minimum words per type. This is a SOFT signal — under-count produces a `warn`,
+// not a hard fail, so it never blocks a deploy on its own. Set the floor below the
+// real target (the SOP per-type table holds the real ranges). Add a key for every
+// bucket pageType() can return.
+export const WORD_MIN = { home: 500, city: 600, service: 600, guide: 900, cost: 600, guidehub: 120, info: 200, legal: 150 };
+
+// ── SCHEMA_REQ ── THE LINE WHERE BUSINESSES DIVERGE ──────────────────────────
+// Required JSON-LD @type nodes per page type. If a required node is missing from
+// the rendered HTML, that page HARD-FAILS (when 'nodes' is in REQ for the type).
+//
+// THIS IS THE PROOF the config must be per-business: the SAME page type needs
+// DIFFERENT schema across sites.
+//   • A mold/water-damage site (this example) is a real service-area business →
+//     city pages MUST carry 'LocalBusiness' (service-area, no streetAddress).
+//   • A consumer-advocacy / lead-routing site (e.g. hallowed-paws) MUST OMIT
+//     'LocalBusiness' on city pages — emitting it would expose the operator/partner
+//     and break the business model. There, city would be ['Service','BreadcrumbList'].
+//
+// So: decide per business whether 'LocalBusiness' belongs here. Do not copy blindly.
+export const SCHEMA_REQ = {
+  home: ['Organization', 'WebSite'],
+  city: ['Service', 'LocalBusiness', 'BreadcrumbList'],   // ← some businesses MUST drop 'LocalBusiness'
+  service: ['Service', 'LocalBusiness', 'BreadcrumbList'], // ← same divergence applies here
+  cost: ['Article', 'BreadcrumbList', 'FAQPage'],
+  guide: ['Article', 'BreadcrumbList', 'FAQPage'],
+  guidehub: ['BreadcrumbList'],
+  info: ['BreadcrumbList'],
+  legal: ['BreadcrumbList'],
+};
+
+// ── REQ ──────────────────────────────────────────────────────────────────────
+// Which checks HARD-FAIL (exit non-zero → blocks the deploy) per page type.
+// A check NOT listed for a type still runs and reports, but only ever `warn`s.
+// Available check keys (see seo-audit.mjs):
+//   title desc h1 canon og ogimg img answer faq crumb nodes links words schema
+// Trim per type — e.g. legal pages don't need an answer block or FAQ, so those
+// keys are absent below and won't block.
+export const REQ = {
+  home:     ['title','desc','h1','canon','og','img','answer','faq','nodes','links','words','schema'],
+  city:     ['title','desc','h1','canon','og','img','answer','faq','crumb','nodes','links','words','schema'],
+  service:  ['title','desc','h1','canon','og','img','answer','faq','crumb','nodes','links','words','schema'],
+  guide:    ['title','desc','h1','canon','og','img','answer','faq','crumb','nodes','links','words','schema'],
+  cost:     ['title','desc','h1','canon','og','img','answer','faq','crumb','nodes','links','words','schema'],
+  guidehub: ['title','desc','h1','canon','og','crumb','nodes','links','schema'],
+  info:     ['title','desc','h1','canon','og','answer','crumb','nodes','links','schema'],
+  legal:    ['title','desc','h1','canon','crumb','nodes','schema'],
+};
+
+// ── Red-team gate (optional) ─────────────────────────────────────────────────
+// `scripts/redteam-check.mjs` (wired into `npm run gate`) blocks a guide from
+// deploying unless its CURRENT content hash has a recorded PASS in the ledger —
+// the enforcement teeth behind docs/RED-TEAM-SOP.md. Both keys are optional and
+// fall back to the defaults below if omitted, so an older config keeps working.
+//   GUIDES_DIR  where guide source files live (.md / .mdx). Point at wherever this
+//               project keeps its high-claim-density content — must agree with the
+//               guide content path you set in /launch + page-builder.
+//   LEDGER      where the content-hash PASS ledger is stored (committed to the repo).
+export const GUIDES_DIR = 'src/content/guides';
+export const LEDGER = 'docs/red-team-ledger.json';

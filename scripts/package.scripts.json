@@ -1,0 +1,10 @@
+{
+  "//": "Content-launch scripts to MERGE into your project's package.json `scripts` block. The kit has no package.json (it's a template); bootstrap-project copies these three keys into the project's own package.json. `gate` is the hard SEO/AEO/red-team gate; `deploy` runs the gate before shipping so a failing page BLOCKS the deploy.",
+  "//deps": "Requires devDependency `sharp` for scripts/gen-image.mjs (fal.ai image step). seo-audit.mjs, validate-build.mjs, and redteam-check.mjs use only Node builtins.",
+  "//gate": "redteam-check.mjs enforces docs/RED-TEAM-SOP.md: a guide can't deploy unless its current content hash has a recorded PASS in the red-team ledger. No-op until the project has guides.",
+  "scripts": {
+    "audit": "node scripts/seo-audit.mjs",
+    "gate": "astro build && node scripts/seo-audit.mjs && node scripts/validate-build.mjs && node scripts/redteam-check.mjs",
+    "deploy": "npm run gate && wrangler deploy"
+  }
+}

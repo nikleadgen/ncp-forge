@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Forge">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#101a2b"/>
+      <stop offset="1" stop-color="#0a0f18"/>
+    </linearGradient>
+    <linearGradient id="anvil" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5cf0b0"/>
+      <stop offset="1" stop-color="#23b87f"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <!-- spark -->
+  <path d="M386 150 l10 26 26 10 -26 10 -10 26 -10 -26 -26 -10 26 -10 z" fill="#fbbf24" opacity="0.9"/>
+  <!-- anvil -->
+  <g fill="url(#anvil)">
+    <polygon points="104,214 176,192 176,238 104,238"/>
+    <rect x="168" y="192" width="214" height="46" rx="8"/>
+    <polygon points="236,238 312,238 296,300 252,300"/>
+    <rect x="164" y="300" width="220" height="40" rx="10"/>
+    <rect x="140" y="340" width="268" height="16" rx="8" opacity="0.85"/>
+  </g>
+  <!-- highlight -->
+  <rect x="178" y="200" width="150" height="8" rx="4" fill="#ffffff" opacity="0.30"/>
+</svg>

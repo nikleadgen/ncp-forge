@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "deny": [
+      "mcp__cc12fae6-f57d-4b82-8310-331cf51b1a41__d1_database_delete",
+      "mcp__cc12fae6-f57d-4b82-8310-331cf51b1a41__kv_namespace_delete",
+      "mcp__cc12fae6-f57d-4b82-8310-331cf51b1a41__r2_bucket_delete",
+      "mcp__55cb5bce-afba-4c47-a144-57b17571b339__notion-move-pages",
+      "mcp__55cb5bce-afba-4c47-a144-57b17571b339__notion-update-data-source",
+      "mcp__claude_ai_Notion__notion-move-pages",
+      "mcp__claude_ai_Notion__notion-update-data-source"
+    ]
+  }
+}

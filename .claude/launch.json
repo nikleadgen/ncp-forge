@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "autoPort": true,
+  "configurations": [
+    {
+      "name": "forge",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-c", "import os,http.server,socketserver;socketserver.TCPServer(('',int(os.environ.get('PORT','8731'))),http.server.SimpleHTTPRequestHandler).serve_forever()"],
+      "port": 8731
+    }
+  ]
+}
