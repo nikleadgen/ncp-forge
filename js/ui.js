@@ -309,7 +309,7 @@ function buildActive(s, optionalDayKey) {
     cues: b.cues, note: b.note, demo: b.demo, rest: b.rest, paceHint: b.paceHint, detail: b.detail,
     mode: b.mode, minutes: b.minutes, perMinute: b.perMinute, rounds: b.rounds, items: b.items, timeCap: b.timeCap,
     loadType: b.loadType, isTest: b.isTest, targetRir: b.targetRir,
-    sets: (b.sets || []).map((st) => ({ ...st, done: false, rpe: null })),
+    sets: (b.sets || []).map((st) => ({ ...st, done: false, rpe: null, rir: null })),
     resultSeconds: null, resultRounds: null, topWeight: null, result: '',
   }));
   return {
@@ -397,10 +397,11 @@ function setRowControls(b, bi, si, st) {
     </div>`;
   return weightCtl + `<span class="x">×</span>` + repsCtl;
 }
-function rpeRow(bi, si, st) {
+function rirRow(bi, si, st) {
+  const opts = [[0, '0'], [1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5+']];
   let chips = '';
-  [6, 7, 8, 9, 10].forEach((v) => { chips += `<button class="rpe-chip ${st.rpe === v ? 'sel' : ''}" data-act="rpe" data-bi="${bi}" data-si="${si}" data-val="${v}">${v}</button>`; });
-  return `<div class="rpe-row"><span class="muted small">RPE</span>${chips}</div>`;
+  opts.forEach(([v, lbl]) => { chips += `<button class="rpe-chip ${st.rir === v ? 'sel' : ''}" data-act="setrir" data-bi="${bi}" data-si="${si}" data-val="${v}">${lbl}</button>`; });
+  return `<div class="rpe-row"><span class="muted small">reps left?</span>${chips}</div>`;
 }
 function setsBody(b, bi) {
   return `<div class="sets">${b.sets.map((st, si) => `
@@ -409,7 +410,7 @@ function setsBody(b, bi) {
       <div class="set-ctls">${setRowControls(b, bi, si, st)}</div>
       <button class="done-btn ${st.done ? 'on' : ''}" data-act="logset" data-bi="${bi}" data-si="${si}">${st.done ? '✓' : 'Log'}</button>
     </div>
-    ${st.done ? rpeRow(bi, si, st) : ''}
+    ${st.done ? rirRow(bi, si, st) : ''}
   `).join('')}</div>`;
 }
 function repsBody(b, bi) {
@@ -419,7 +420,7 @@ function repsBody(b, bi) {
       <div class="set-ctls">${setRowControls(b, bi, si, st)}</div>
       <button class="done-btn ${st.done ? 'on' : ''}" data-act="logset" data-bi="${bi}" data-si="${si}">${st.done ? '✓' : 'Log'}</button>
     </div>
-    ${st.done && st.kind === 'amrap' ? rpeRow(bi, si, st) : ''}
+    ${st.done && st.kind !== 'amrap' ? rirRow(bi, si, st) : ''}
   `).join('')}</div>`;
 }
 function holdBody(b, bi) {
@@ -639,7 +640,7 @@ function onClick(e) {
     case 'inc': stepSet(t, +1); break;
     case 'dec': stepSet(t, -1); break;
     case 'logset': logSet(+t.dataset.bi, +t.dataset.si); break;
-    case 'rpe': setRpe(+t.dataset.bi, +t.dataset.si, +t.dataset.val); break;
+    case 'setrir': setRir(+t.dataset.bi, +t.dataset.si, +t.dataset.val); break;
     case 'next': moveCursor(+1); break;
     case 'prev': moveCursor(-1); break;
     case 'pause': location.hash = '#/today'; render(); break;
@@ -756,17 +757,17 @@ function logSet(bi, si) {
     const sec = blk.rest || store.get().settings.restDefault || 120;
     if (store.get().settings.autoRest !== false && ['sets', 'reps', 'hold', 'carry'].includes(blk.kind)) startRest(sec);
     // set-to-set nudge
-    const adj = engine.adjustAfterSet(st, { reps: st.reps, rpe: st.rpe }, U(), blk.loadType);
+    const adj = engine.adjustAfterSet(st, { reps: st.reps, rir: st.rir }, U(), blk.loadType);
     if (adj && adj.nextWeight && blk.sets[si + 1] && blk.sets[si + 1].weight != null) blk.sets[si + 1].weight = adj.nextWeight;
   }
   renderWorkout();
 }
-function setRpe(bi, si, val) {
+function setRir(bi, si, val) {
   const a = store.get().active; if (!a) return;
   const blk = a.entries[bi]; const st = blk.sets[si];
-  st.rpe = st.rpe === val ? null : val;
-  // re-run set-to-set nudge with the RPE now known
-  if (st.rpe != null) { const adj = engine.adjustAfterSet(st, { reps: st.reps, rpe: st.rpe }, U(), blk.loadType); if (adj && adj.nextWeight && blk.sets[si + 1] && blk.sets[si + 1].weight != null) blk.sets[si + 1].weight = adj.nextWeight; }
+  st.rir = st.rir === val ? null : val;
+  // re-run set-to-set nudge now that actual reps-in-reserve is known
+  if (st.rir != null) { const adj = engine.adjustAfterSet(st, { reps: st.reps, rir: st.rir }, U(), blk.loadType); if (adj && adj.nextWeight && blk.sets[si + 1] && blk.sets[si + 1].weight != null) blk.sets[si + 1].weight = adj.nextWeight; }
   store.patchActive(() => {});
   renderWorkout();
 }
@@ -804,7 +805,7 @@ function finishSave() {
     optional: a.optional, sessionRPE: srpe, durationMin,
     entries: a.entries.map((e) => ({
       exerciseId: e.exerciseId, name: e.name,
-      sets: e.sets.map((s) => ({ weight: s.weight ?? null, reps: s.reps ?? null, seconds: s.seconds ?? null, rpe: s.rpe ?? null, targetRir: s.targetRir ?? null, kind: s.kind, done: s.done })),
+      sets: e.sets.map((s) => ({ weight: s.weight ?? null, reps: s.reps ?? null, seconds: s.seconds ?? null, rir: s.rir ?? null, rpe: s.rpe ?? null, targetRir: s.targetRir ?? null, kind: s.kind, done: s.done })),
       resultSeconds: e.resultSeconds || null, resultRounds: e.resultRounds || null, topWeight: e.topWeight || null,
     })),
   };

@@ -2,6 +2,13 @@
 
 All notable changes to Forge (NCP Games Trainer).
 
+## [0.2.1] — 2026-06-15 — Effort-logging fixes (user feedback)
+- Per-set effort logging switched from a confusing 6–10 RPE to a **"reps left?" picker (0–5+)** that
+  matches the prescription's reps-in-reserve language — you can now log the RIR you actually had.
+- Prescribed RIR ≥5 now shows as **"leave 4+ (easy)"** instead of a falsely-precise "5" (research: RIR
+  estimates are unreliable past ~3–4). Set-to-set load nudge now keys off actual RIR. SW cache → forge-v4.
+- Home tab is a hub (this-week board + activity calendar); Android Hume paste flow.
+
 ## [0.2.0] — 2026-06-14 — Hume/recovery bridge + live deploy
 - **Body & recovery log** — weight, body-fat %, resting HR, HRV, sleep (schema v2 migration).
 - HRV + short-sleep now refine daily readiness; bodyweight trend added to Progress; weight feeds the

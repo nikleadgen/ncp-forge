@@ -256,7 +256,7 @@ function resolveSlot(slot, c) {
       const n = setsCount(sc.sets, volMult);
       const sets = Array.from({ length: n }, (_, i) => ({ idx: i, weight: w, reps: sc.reps, targetRir: effRir, kind: 'work' }));
       return { ...base, kind: 'sets', targetRir: effRir,
-        prescription: `${n} × ${sc.reps}` + (w ? ` @ ${w}${c.units}` : '') + `  ·  leave ${effRir} in reserve`, sets };
+        prescription: `${n} × ${sc.reps}` + (w ? ` @ ${w}${c.units}` : '') + `  ·  leave ${effRir >= 5 ? '4+ (easy)' : effRir} in reserve`, sets };
     }
     case 'topset': {
       const effRir = Math.max(0, Math.min(6, sc.rir + c.wave.rirDelta));
@@ -267,7 +267,7 @@ function resolveSlot(slot, c) {
       const sets = [{ idx: 0, weight: top, reps: sc.reps, targetRir: effRir, kind: 'top' }];
       for (let i = 1; i < n; i++) sets.push({ idx: i, weight: boW, reps: sc.reps + 1, targetRir: effRir + 1, kind: 'backoff' });
       return { ...base, kind: 'sets', targetRir: effRir,
-        prescription: `Top set ${sc.reps} @ ${top}${c.units} (leave ${effRir}), then ${n - 1} × ${sc.reps + 1} @ ${boW}${c.units}`, sets };
+        prescription: `Top set ${sc.reps} @ ${top}${c.units} (leave ${effRir >= 5 ? '4+' : effRir}), then ${n - 1} × ${sc.reps + 1} @ ${boW}${c.units}`, sets };
     }
     case 'power': {
       const e1rm = currentE1RM(c.state, slot.ex, c.profile);
@@ -371,17 +371,17 @@ function resolveRun(base, sc, c, ex) {
 export function adjustAfterSet(set, actual, units = 'lb', loadType = 'barbell') {
   if (!set || set.weight == null || actual == null) return null;
   const targetRir = set.targetRir != null ? set.targetRir : 2;
-  const targetRpe = 10 - targetRir;
-  const rpe = actual.rpe;
-  if (rpe == null) return null;
-  const diff = rpe - targetRpe;
-  if (diff >= 1.5) {
+  let rir = actual.rir;
+  if (rir == null && actual.rpe != null) rir = Math.max(0, 10 - actual.rpe);
+  if (rir == null) return null;
+  // fewer reps left than planned => too heavy; clearly more left => too light
+  if (rir <= targetRir - 2) {
     const next = roundLoad(set.weight * 0.93, loadType, units);
-    return { nextWeight: next, message: `That was harder than planned — try ${next}${units} next set.` };
+    return { nextWeight: next, message: `Tougher than planned — ${next}${units} next set.` };
   }
-  if (diff <= -1.5 && actual.reps >= set.reps) {
+  if (rir >= targetRir + 2 && (actual.reps == null || actual.reps >= set.reps)) {
     const next = roundLoad(set.weight * 1.04, loadType, units);
-    return { nextWeight: next, message: `Lots left in the tank — bump to ${next}${units}.` };
+    return { nextWeight: next, message: `Plenty left — bump to ${next}${units}.` };
   }
   return null;
 }
@@ -403,7 +403,7 @@ export function ingestModel(state, session) {
     const ex = getExercise(entry.exerciseId);
     for (const st of (entry.sets || [])) {
       if (!st.done) continue;
-      const rir = st.rpe != null ? Math.max(0, 10 - st.rpe) : (st.targetRir != null ? st.targetRir : 1);
+      const rir = st.rir != null ? st.rir : (st.rpe != null ? Math.max(0, 10 - st.rpe) : (st.targetRir != null ? st.targetRir : 1));
       if ((ex.unit === 'weight') && st.weight && st.reps) bumpE1RM(entry.exerciseId, e1rmFromSet(st.weight, st.reps, rir));
       if ((ex.unit === 'bw') && st.reps && (st.kind === 'amrap' || st.rpe == null || st.rpe >= 9)) bumpReps(entry.exerciseId, st.reps);
     }

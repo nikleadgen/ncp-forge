@@ -115,7 +115,7 @@ body[data-route="workout"] #app,body[data-route="onboarding"] #app{padding-botto
 .done-btn{background:var(--accent2);color:#04203f;font-weight:800;border-radius:10px;padding:11px 14px;min-width:64px;flex:none}
 .done-btn.on{background:var(--accent);color:#08220f}
 .done-btn.wide{width:100%;padding:16px;font-size:16px;margin-top:10px}
-.rpe-row{display:flex;align-items:center;gap:6px;margin:-2px 0 10px 44px}
+.rpe-row{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin:-2px 0 10px 44px}
 .rpe-chip{background:var(--bg2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-weight:700;font-size:13px}
 .rpe-chip.sel{background:#fbbf24;color:#3a2a00;border-color:#fbbf24}
 .finish-main{padding-top:8px}
