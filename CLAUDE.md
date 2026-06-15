@@ -30,9 +30,10 @@ as YOURS below, don't read, write, move, or delete it.
 
 **You are `ncp-forge`. You own — and may ONLY touch:**
 - The `Fitness Training/` project directory.
-- **No shared fleet resources.** No GitHub repo, Cloudflare worker, Notion hub, or HubSpot brand.
-  All user data lives in the browser (`localStorage`) on the operator's device; backups are local
-  JSON files. There is nothing in a shared system to partition.
+- GitHub repo **`nikleadgen/ncp-forge`** (public, static, **no secrets**) → served via **GitHub Pages**
+  at `https://nikleadgen.github.io/ncp-forge/`. Push to `main` auto-deploys (`.github/workflows/deploy-pages.yml`).
+- **No other shared fleet resources** — no Cloudflare worker, Notion hub, or HubSpot brand. All user
+  data lives in the browser (`localStorage`) on the operator's device; backups are local JSON files.
 
 **Never touch:** the NextRoll Notion teamspace; any other business's repo, worker, store, Notion hub,
 or HubSpot brand. If hosting is ever added, name the worker `ncp-forge` (the Naming Law).
