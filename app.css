@@ -222,6 +222,12 @@ details summary{cursor:pointer}
 .paste-line input{flex:1;min-width:0;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--txt);font-size:14px}
 .paste-line .btn-ghost{flex:none;padding:11px 16px}
 
+/* niggles / tweaks */
+.caution-callout{background:rgba(251,146,60,.12);border-left:3px solid #fb923c;border-radius:8px;padding:9px 11px;font-size:14px;margin:8px 0;color:#fdba74}
+.tweak-banner{background:rgba(251,146,60,.10);border:1px solid rgba(251,146,60,.3);color:#fdba74;border-radius:12px;padding:9px 11px;font-size:13px;margin-bottom:12px}
+.tweak-banner a{color:#fdba74;text-decoration:underline;font-weight:600}
+.tweakchips{margin-top:6px}
+
 /* toast */
 #toast{position:fixed;left:50%;transform:translateX(-50%) translateY(20px);bottom:calc(80px + var(--safe-b));
   background:var(--card2);border:1px solid var(--accent);color:var(--txt);padding:12px 18px;border-radius:12px;

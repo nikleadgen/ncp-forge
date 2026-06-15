@@ -4,7 +4,7 @@
 // bump SCHEMA_VERSION and add a function to MIGRATIONS.
 
 const KEY = 'forge_state';
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 function defaultState() {
   return {
@@ -19,6 +19,7 @@ function defaultState() {
     program: { startDateISO: null, absWeek: 0, sessionInWeek: 0 },
     readiness: [],   // [{dateISO, sleep, soreness, energy, stress, motivation, score}]
     body: [],        // [{dateISO, weight, bodyfat, restingHR, hrv, sleepHrs}] — Hume / Apple Health bridge
+    tweaks: [],      // [{area, sinceISO}] — flagged niggles the engine trains around
     sessions: [],    // completed session logs (the permanent record)
     active: null,    // in-progress workout, persisted so a refresh never loses a set
     history: {},     // { exerciseId: [{dateISO, weight, reps, rpe, e1rm, bw}] } — fast index for charts/engine
@@ -30,6 +31,15 @@ function defaultState() {
 const MIGRATIONS = [
   // v1 → v2: add the body/recovery log (Hume / Apple Health bridge)
   (s) => { if (!Array.isArray(s.body)) s.body = []; return s; },
+  // v2 → v3: add the niggle/tweak list, seeded from any onboarding injuries
+  (s) => {
+    if (!Array.isArray(s.tweaks)) {
+      s.tweaks = [];
+      const since = (s.meta && s.meta.createdISO) || new Date().toISOString();
+      for (const a of ((s.profile && s.profile.injuries) || [])) if (a && a !== 'none') s.tweaks.push({ area: a, sinceISO: since });
+    }
+    return s;
+  },
 ];
 
 function migrate(state) {
@@ -131,6 +141,16 @@ export function todayBody() {
   const day = new Date().toISOString().slice(0, 10);
   return (s.body || []).find((b) => b.dateISO.slice(0, 10) === day) || null;
 }
+
+// Niggles / tweaks the engine trains around.
+export function addTweaks(areas) {
+  update((s) => {
+    const have = new Set((s.tweaks || []).map((t) => t.area));
+    for (const a of (areas || [])) if (a && a !== 'none' && !have.has(a)) { s.tweaks.push({ area: a, sinceISO: new Date().toISOString() }); have.add(a); }
+  });
+}
+export function removeTweak(area) { update((s) => { s.tweaks = (s.tweaks || []).filter((t) => t.area !== area); }); }
+export function activeTweaks() { return get().tweaks || []; }
 
 export function startSession(session) { update((s) => { s.active = session; }); }
 export function patchActive(mutator) { update((s) => { if (s.active) mutator(s.active); }); }

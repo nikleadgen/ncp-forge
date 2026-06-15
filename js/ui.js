@@ -158,6 +158,7 @@ function renderToday() {
   const day = sess.day;
   const acwr = engine.computeACWR(s);
   const dateStr = fmtDate(program.dateForWeek(s.program.startDateISO, s.program.absWeek));
+  const tweaks = store.activeTweaks();
 
   const readinessCard = rd ? `
     <div class="card readiness-done" data-act="goto" data-href="#readiness">
@@ -180,6 +181,7 @@ function renderToday() {
         <span class="muted small">${esc(ctx.waveLabel)}${ctx.isDeload ? ' · DELOAD' : ''}${ctx.isTestWeek ? ' · TEST WEEK' : ''}</span>
         <span class="muted small right">Wk ${s.program.absWeek + 1} of 52</span></div>
 
+      ${tweaks.length ? `<div class="tweak-banner">⚠ Training around your ${tweaks.map((t) => esc(engine.areaLabel(t.area))).join(', ')}. <a href="#/settings">manage</a></div>` : ''}
       ${readinessCard}
       ${weekBoardHtml(s)}
       ${calendarHtml(s)}
@@ -308,7 +310,7 @@ function buildActive(s, optionalDayKey) {
     exerciseId: b.exerciseId, name: b.name, kind: b.kind, type: b.type, prescription: b.prescription,
     cues: b.cues, note: b.note, demo: b.demo, rest: b.rest, paceHint: b.paceHint, detail: b.detail,
     mode: b.mode, minutes: b.minutes, perMinute: b.perMinute, rounds: b.rounds, items: b.items, timeCap: b.timeCap,
-    loadType: b.loadType, isTest: b.isTest, targetRir: b.targetRir,
+    loadType: b.loadType, isTest: b.isTest, targetRir: b.targetRir, caution: b.caution,
     sets: (b.sets || []).map((st) => ({ ...st, done: false, rpe: null, rir: null })),
     resultSeconds: null, resultRounds: null, topWeight: null, result: '',
   }));
@@ -365,7 +367,7 @@ function renderBlock(b, bi) {
       <div class="ex-name">${esc(b.name)} ${b.demo ? `<a class="how" href="${demoURL(b.demo)}" target="_blank" rel="noopener">how?</a>` : ''}</div>
       <div class="presc">${esc(b.prescription)}</div>
     </div>
-    ${b.note ? `<div class="note-callout">${esc(b.note)}</div>` : ''}
+    ${b.note ? `<div class="${b.caution ? 'caution-callout' : 'note-callout'}">${esc(b.note)}</div>` : ''}
     ${b.detail ? `<div class="muted small">${esc(b.detail)}</div>` : ''}
     ${b.paceHint ? `<div class="hint">🏃 ${esc(b.paceHint)}</div>` : ''}
     ${body}
@@ -551,6 +553,7 @@ function renderSettings() {
   const s = store.get();
   const p = s.profile;
   const u = U();
+  const cap = (x) => x.charAt(0).toUpperCase() + x.slice(1);
   return root.innerHTML = `
     <header class="topbar"><div class="brand-sm">Settings</div></header>
     <main class="view">
@@ -577,6 +580,10 @@ function renderSettings() {
         <div class="lbl">Position in plan</div>
         <label class="kv"><span>Current week (1–52)</span><input class="mini-in" data-act="set-week" type="number" inputmode="numeric" value="${s.program.absWeek + 1}"></label>
         <label class="kv"><span>Session in week (1–4)</span><input class="mini-in" data-act="set-sess" type="number" inputmode="numeric" value="${s.program.sessionInWeek + 1}"></label>
+      </div>
+      <div class="card">
+        <div class="lbl">Niggles & tweaks</div>
+        ${(s.tweaks || []).length ? (s.tweaks || []).map((t) => `<div class="kv"><span>${esc(cap(engine.areaLabel(t.area)))} <span class="muted small">since ${fmtDate(t.sinceISO)}</span></span><button class="link-btn" data-act="clear-tweak" data-area="${t.area}">✓ Resolved</button></div>`).join('') : '<div class="muted small">None flagged. Flag one at the end of a workout and Forge trains around it automatically.</div>'}
       </div>
       <div class="card">
         <div class="lbl">Health data (Hume / Apple Health)</div>
@@ -647,6 +654,7 @@ function onClick(e) {
     case 'finish-confirm': enterFinish(); break;
     case 'finish-cancel': store.patchActive((x) => { x.finishing = false; }); renderWorkout(); break;
     case 'finish-rpe': setFinishRpe(+t.dataset.val); break;
+    case 'finish-tweak': toggleFinishTweak(t.dataset.val); break;
     case 'finish-save': finishSave(); break;
     case 'rest-skip': rest.endAt = 0; { const bar = document.getElementById('rest-bar'); if (bar) { bar.classList.remove('show'); bar.innerHTML = ''; } } break;
     case 'rest-add': rest.endAt += 15000; tickRest(); break;
@@ -657,6 +665,7 @@ function onClick(e) {
     case 'import-health': document.getElementById('health-file').click(); break;
     case 'save-body': saveBody(); break;
     case 'paste-health': pasteHealth(); break;
+    case 'clear-tweak': store.removeTweak(t.dataset.area); render(); toast('Cleared — back in the plan.'); break;
     case 'reset': doReset(); break;
   }
 }
@@ -712,6 +721,7 @@ function finishOnboarding() {
     pull_up: onb.pull_up, push_up: onb.push_up, mile_seconds: onb.mile_seconds, sandbag: onb.sandbagMax,
   });
   store.seedMaxes(maxes);
+  store.addTweaks(profile.injuries || []);
   onbStep = 0;
   location.hash = '#/today';
   render();
@@ -780,6 +790,19 @@ function moveCursor(dir) {
 }
 function enterFinish() { store.patchActive((x) => { x.finishing = true; }); renderWorkout(); }
 function setFinishRpe(v) { store.patchActive((x) => { x.sessionRPE = x.sessionRPE === v ? null : v; }); renderWorkout(); }
+function tweakChipsHtml(a) {
+  const sel = a.tweakAreas || [];
+  const opts = [['none', 'None'], ['knee', 'Knee'], ['back', 'Lower back'], ['shoulder', 'Shoulder'], ['elbow', 'Elbow'], ['hip', 'Hip'], ['wrist', 'Wrist'], ['ankle', 'Ankle']];
+  return opts.map(([id, lbl]) => { const on = id === 'none' ? sel.length === 0 : sel.includes(id); return `<button class="chip ${on ? 'sel' : ''}" data-act="finish-tweak" data-val="${id}">${lbl}</button>`; }).join('');
+}
+function toggleFinishTweak(id) {
+  store.patchActive((x) => {
+    x.tweakAreas = x.tweakAreas || [];
+    if (id === 'none') x.tweakAreas = [];
+    else x.tweakAreas = x.tweakAreas.includes(id) ? x.tweakAreas.filter((z) => z !== id) : [...x.tweakAreas, id];
+  });
+  renderWorkout();
+}
 function finishPanel(a) {
   const logged = a.entries.reduce((n, e) => n + (e.sets || []).filter((s) => s.done).length, 0);
   const dur = Math.max(1, Math.round((Date.now() - new Date(a.startedAt).getTime()) / 60000));
@@ -792,6 +815,8 @@ function finishPanel(a) {
       <div class="lbl" style="margin-top:20px">How hard was that overall?</div>
       <div class="rpe-grid">${chips}</div>
       <div class="muted small">1 = easy · 7 = hard but solid · 10 = everything you had</div>
+      <div class="lbl" style="margin-top:18px">Anything tweaky? (optional — Forge trains around it)</div>
+      <div class="chiprow wrap tweakchips">${tweakChipsHtml(a)}</div>
       <button class="btn-primary big" data-act="finish-save">Save session ✓</button>
     </main>`;
 }
@@ -802,7 +827,7 @@ function finishSave() {
   const session = {
     id: a.startedAt, dateISO: new Date().toISOString(), startedAt: a.startedAt,
     absWeek: a.absWeek, sessionInWeek: a.sessionInWeek, dayKey: a.dayKey, dayName: a.dayName,
-    optional: a.optional, sessionRPE: srpe, durationMin,
+    optional: a.optional, sessionRPE: srpe, durationMin, tweaks: a.tweakAreas || [],
     entries: a.entries.map((e) => ({
       exerciseId: e.exerciseId, name: e.name,
       sets: e.sets.map((s) => ({ weight: s.weight ?? null, reps: s.reps ?? null, seconds: s.seconds ?? null, rir: s.rir ?? null, rpe: s.rpe ?? null, targetRir: s.targetRir ?? null, kind: s.kind, done: s.done })),
@@ -810,6 +835,7 @@ function finishSave() {
     })),
   };
   // update model BEFORE commit advances the pointer
+  store.addTweaks(a.tweakAreas || []);
   const patch = engine.ingestModel(store.get(), session);
   if (a.optional) {
     // optional sessions log + update model, but don't advance the core pointer

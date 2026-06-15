@@ -206,6 +206,16 @@ function intervalTarget(state, repDist) {
   return null;
 }
 
+// ---------- injury / niggle routing ----------
+// Which body areas each movement loads. Specific overrides first, else by movement pattern.
+const PATTERN_AREAS = { hinge: ['back'], 'power-hinge': ['back'], squat: ['knee'], lunge: ['knee'], vpush: ['shoulder'], hpush: ['shoulder', 'elbow'], vpull: ['shoulder', 'elbow'], hpull: ['shoulder'], strongman: ['back', 'shoulder'], carry: ['back'], power: ['knee'], arms: ['elbow'], aerobic: ['knee', 'ankle'], anaerobic: ['knee', 'ankle'], speed: ['knee', 'ankle'], core: [], mobility: [], grip: [], fullbody: [], test: [], other: [] };
+const EXERCISE_AREAS = { deadlift: ['back'], trap_bar_deadlift: ['back'], romanian_deadlift: ['back'], db_rdl: ['back'], back_squat: ['knee', 'back'], front_squat: ['knee', 'back'], hip_thrust: ['back'], barbell_row: ['back', 'shoulder'], bench_press: ['shoulder', 'elbow'], db_bench_press: ['shoulder', 'elbow'], db_floor_press: ['shoulder', 'elbow'], box_jump: ['knee', 'ankle'], broad_jump: ['knee', 'ankle'], sprints: ['knee', 'ankle', 'hamstring'], run_walk: ['knee', 'ankle'], run_easy: ['knee', 'ankle'], run_tempo: ['knee', 'ankle'], run_intervals_400: ['knee', 'ankle'], run_intervals_800: ['knee', 'ankle'], strides: ['knee', 'ankle'], mile_time_trial: ['knee', 'ankle'], bike_z2: [], ruck: ['back'] };
+export function areasFor(exId) { if (EXERCISE_AREAS[exId]) return EXERCISE_AREAS[exId]; return PATTERN_AREAS[getExercise(exId).pattern] || []; }
+function intersects(arr, set) { return arr.some((a) => set.has(a)); }
+const AREA_LABELS = { knee: 'knee', back: 'lower back', shoulder: 'shoulder', elbow: 'elbow', hip: 'hip', wrist: 'wrist', ankle: 'ankle', hamstring: 'hamstring' };
+export function areaLabel(a) { return AREA_LABELS[a] || a; }
+export function excludedAreas(state) { return new Set(((state.tweaks) || []).map((t) => t.area)); }
+
 // ================= resolve a session into concrete prescriptions =================
 export function resolveSessionAt(state, absWeek, sessionInWeek, opts = {}) {
   const profile = state.profile;
@@ -223,7 +233,8 @@ export function resolveSessionAt(state, absWeek, sessionInWeek, opts = {}) {
   if (!opts.optionalDayKey) slots.push(COMMON_DAYS.warmup.slots[0]);
   for (const s of (day.slots || [])) slots.push(s);
 
-  const blocks = slots.map((slot) => resolveSlot(slot, { state, profile, units, wave, rs, damp, ctx }));
+  const excluded = excludedAreas(state);
+  const blocks = slots.map((slot) => resolveSlot(slot, { state, profile, units, wave, rs, damp, ctx, excluded }));
 
   return {
     absWeek, sessionInWeek, dayKey,
@@ -237,21 +248,31 @@ export function resolveSessionAt(state, absWeek, sessionInWeek, opts = {}) {
 function setsCount(base, volMult) { return Math.max(1, Math.min(base + 1, Math.round(base * volMult))); }
 
 function resolveSlot(slot, c) {
-  const ex = getExercise(slot.ex);
+  let exId = slot.ex;
+  let ex = getExercise(exId);
+  // route around flagged niggles: substitute to a safe alternative, else lighten + caution
+  let routeMult = 1, cautionNote = '';
+  if (c.excluded && c.excluded.size && intersects(areasFor(exId), c.excluded)) {
+    const hit = areasFor(exId).find((a) => c.excluded.has(a));
+    const safe = (ex.sub || []).find((sid) => !intersects(areasFor(sid), c.excluded));
+    if (safe) { exId = safe; ex = getExercise(safe); cautionNote = `Swapped to protect your ${areaLabel(hit)}.`; }
+    else { routeMult = 0.8; cautionNote = `⚠ ${areaLabel(hit)} flagged — pain-free range only, lighter is fine, stop if it hurts.`; }
+  }
   const sc = slot.scheme;
   const volMult = c.wave.volMult * c.rs.volMult * c.damp;
-  const intMult = c.wave.intMult * c.rs.loadMult;
+  const intMult = c.wave.intMult * c.rs.loadMult * routeMult;
   const base = {
-    id: slot.id, exerciseId: slot.ex, name: ex.name, unit: ex.unit, loadType: ex.load,
+    id: slot.id, exerciseId: exId, name: ex.name, unit: ex.unit, loadType: ex.load,
     pattern: ex.pattern, cues: ex.cues || [], demo: ex.demo, sub: ex.sub || [],
-    note: sc.note || slot.note || '', rest: sc.rest || (c.state.settings && c.state.settings.restDefault) || 120,
-    type: sc.t,
+    note: (cautionNote ? cautionNote + (sc.note || slot.note ? ' ' : '') : '') + (sc.note || slot.note || ''),
+    rest: sc.rest || (c.state.settings && c.state.settings.restDefault) || 120,
+    type: sc.t, caution: !!cautionNote,
   };
 
   switch (sc.t) {
     case 'strength': {
       const effRir = Math.max(0, Math.min(6, sc.rir + c.wave.rirDelta));
-      const e1rm = currentE1RM(c.state, slot.ex, c.profile);
+      const e1rm = currentE1RM(c.state, exId, c.profile);
       const w = ex.load === 'bodyweight' ? null : roundLoad(loadForReps(e1rm, sc.reps, effRir) * intMult, ex.load, c.units);
       const n = setsCount(sc.sets, volMult);
       const sets = Array.from({ length: n }, (_, i) => ({ idx: i, weight: w, reps: sc.reps, targetRir: effRir, kind: 'work' }));
@@ -260,7 +281,7 @@ function resolveSlot(slot, c) {
     }
     case 'topset': {
       const effRir = Math.max(0, Math.min(6, sc.rir + c.wave.rirDelta));
-      const e1rm = currentE1RM(c.state, slot.ex, c.profile);
+      const e1rm = currentE1RM(c.state, exId, c.profile);
       const top = roundLoad(loadForReps(e1rm, sc.reps, effRir) * intMult, ex.load, c.units);
       const boW = roundLoad(top * (sc.backoff || 0.9), ex.load, c.units);
       const n = setsCount(sc.sets, volMult);
@@ -270,7 +291,7 @@ function resolveSlot(slot, c) {
         prescription: `Top set ${sc.reps} @ ${top}${c.units} (leave ${effRir >= 5 ? '4+' : effRir}), then ${n - 1} × ${sc.reps + 1} @ ${boW}${c.units}`, sets };
     }
     case 'power': {
-      const e1rm = currentE1RM(c.state, slot.ex, c.profile);
+      const e1rm = currentE1RM(c.state, exId, c.profile);
       const pct = sc.pct || 0.6;
       const w = ex.load === 'bodyweight' ? null : roundLoad(e1rm * pct * intMult, ex.load, c.units);
       const n = setsCount(sc.sets, volMult);
@@ -279,7 +300,7 @@ function resolveSlot(slot, c) {
         prescription: `${n} × ${sc.reps}` + (w ? ` @ ${w}${c.units}` : '') + '  ·  move every rep FAST', sets };
     }
     case 'bwreps': {
-      const max = currentMaxReps(c.state, slot.ex);
+      const max = currentMaxReps(c.state, exId);
       let target;
       if (sc.reps === 'max') target = null;
       else if (sc.reps === 'sub') target = Math.max(3, Math.round((sc.pctMax || 0.7) * max));
@@ -295,7 +316,7 @@ function resolveSlot(slot, c) {
         prescription: 'One all-out set — MAX reps', sets: [{ idx: 0, reps: null, weight: 0, kind: 'amrap' }] };
     }
     case 'emom': {
-      const max = currentMaxReps(c.state, slot.ex);
+      const max = currentMaxReps(c.state, exId);
       const per = sc.reps === 'half' ? Math.max(2, Math.round(max / 2)) : (sc.reps === 'sub' ? Math.max(2, Math.round(0.4 * max)) : sc.reps);
       return { ...base, kind: 'emom',
         prescription: `EMOM ${sc.minutes} min — ${per} reps every minute`, minutes: sc.minutes, perMinute: per,
@@ -308,7 +329,7 @@ function resolveSlot(slot, c) {
       return { ...base, kind: 'hold', prescription: `${n} × ${secs}s hold`, sets };
     }
     case 'carry': {
-      const load = carryLoad(c.state, slot.ex, sc.loadPct || 0.6, c.profile, c.units);
+      const load = carryLoad(c.state, exId, sc.loadPct || 0.6, c.profile, c.units);
       const n = setsCount(sc.sets, volMult);
       const sets = Array.from({ length: n }, (_, i) => ({ idx: i, weight: load, dist: sc.dist, kind: 'carry' }));
       return { ...base, kind: 'carry', prescription: `${n} × ${sc.dist}yd @ ${load}${c.units}`, sets };
@@ -330,7 +351,7 @@ function resolveSlot(slot, c) {
     case 'test_e1rm': {
       return { ...base, kind: 'sets', isTest: true, targetRir: 1,
         prescription: `Work up to a heavy ${sc.topReps} (leave ~1 in the tank)`,
-        sets: [{ idx: 0, reps: sc.topReps, weight: currentE1RM(c.state, slot.ex, c.profile) ? roundLoad(loadForReps(currentE1RM(c.state, slot.ex, c.profile), sc.topReps, 1), ex.load, c.units) : null, targetRir: 1, kind: 'test' }] };
+        sets: [{ idx: 0, reps: sc.topReps, weight: currentE1RM(c.state, exId, c.profile) ? roundLoad(loadForReps(currentE1RM(c.state, exId, c.profile), sc.topReps, 1), ex.load, c.units) : null, targetRir: 1, kind: 'test' }] };
     }
     default:
       return { ...base, kind: 'note', prescription: base.note || 'See notes', sets: [] };

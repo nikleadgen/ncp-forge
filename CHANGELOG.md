@@ -2,6 +2,13 @@
 
 All notable changes to Forge (NCP Games Trainer).
 
+## [0.2.2] — 2026-06-15 — Pain/tweak flag + injury routing (user request)
+- Flag a cranky area (knee / lower back / shoulder / elbow / hip / wrist / ankle) at the end of any
+  workout and Forge **trains around it**: swaps to a joint-safe alternative when one exists (e.g. a
+  run becomes a ruck), otherwise **lightens the load + shows a pain-free-range caution**. Today banner
+  shows what you're working around; Settings lets you mark it resolved. Seeds from onboarding injuries.
+- Schema v3 migration (adds the tweak list). SW cache → forge-v5. Local dev server now sends no-store.
+
 ## [0.2.1] — 2026-06-15 — Effort-logging fixes (user feedback)
 - Per-set effort logging switched from a confusing 6–10 RPE to a **"reps left?" picker (0–5+)** that
   matches the prescription's reps-in-reserve language — you can now log the RIR you actually had.
