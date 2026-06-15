@@ -178,17 +178,11 @@ function renderToday() {
     <main class="view">
       <div class="phase-strip"><span class="pill" style="background:${phaseColor(ctx.phaseIndex)}">${esc(ctx.phase.short)}</span>
         <span class="muted small">${esc(ctx.waveLabel)}${ctx.isDeload ? ' · DELOAD' : ''}${ctx.isTestWeek ? ' · TEST WEEK' : ''}</span>
-        <span class="muted small right">Session ${s.program.sessionInWeek + 1} of 4</span></div>
+        <span class="muted small right">Wk ${s.program.absWeek + 1} of 52</span></div>
 
       ${readinessCard}
-
-      <div class="card today-session">
-        <div class="lbl">Today</div>
-        <div class="session-title">${esc(day.name)}</div>
-        <div class="muted small">${esc(sessionPreview(sess, s))}</div>
-        ${ctx.phase.layoutNote ? `<div class="hint">💡 ${esc(ctx.phase.layoutNote)}</div>` : ''}
-        <button class="btn-primary big" data-act="start" data-optional="">${s.active ? 'Resume Workout →' : 'Start Workout →'}</button>
-      </div>
+      ${weekBoardHtml(s)}
+      ${calendarHtml(s)}
 
       <div class="card acwr-mini">
         <div class="row between"><div class="lbl">Training load (7d vs 28d)</div><div class="badge" style="color:${acwr.color}">${acwr.ratio ? acwr.ratio.toFixed(2) : '—'}</div></div>
@@ -196,15 +190,63 @@ function renderToday() {
       </div>
 
       ${bodyCardHtml(latestB, todayB)}
-
-      <div class="optionals">
-        <div class="lbl">Optional today (only if you've got the gas)</div>
-        ${program.optionalDays().map((k) => {
-          const d = program.COMMON_DAYS[k];
-          return `<button class="opt-row" data-act="start" data-optional="${k}"><span>＋ ${esc(d.name)}</span><span class="muted small">${esc(optPreview(k))}</span></button>`;
-        }).join('')}
-      </div>
     </main>`;
+}
+
+// "This week" board — the 4 core sessions with status + a Start on the next one, plus optional days.
+function weekBoardHtml(s) {
+  const aw = s.program.absWeek, cur = s.program.sessionInWeek;
+  const ctx = program.planContext(aw);
+  let rows = '';
+  for (let i = 0; i < 4; i++) {
+    const sess = program.getSession(aw, i);
+    const logged = (s.sessions || []).find((x) => x.absWeek === aw && x.sessionInWeek === i);
+    const status = (logged || i < cur) ? 'done' : (i === cur ? 'next' : 'upcoming');
+    const icon = status === 'done' ? '✓' : (status === 'next' ? '▶' : i + 1);
+    const meta = logged ? `${fmtDate(logged.dateISO)} · RPE ${logged.sessionRPE || '—'}` : (status === 'next' ? 'up next' : 'queued');
+    rows += `<div class="wk-row ${status}">
+      <div class="wk-ic">${icon}</div>
+      <div class="wk-info"><div class="wk-name">${esc(sess.day.name)}</div><div class="muted small">${esc(meta)}</div></div>
+      ${status === 'next' ? `<button class="btn-primary wk-start" data-act="start" data-optional="">${s.active ? 'Resume' : 'Start'} →</button>` : ''}
+    </div>`;
+  }
+  const opt = program.optionalDays().map((k) => {
+    const d = program.COMMON_DAYS[k];
+    return `<button class="opt-row" data-act="start" data-optional="${k}"><span>＋ ${esc(d.name)}</span><span class="muted small">${esc(optPreview(k))}</span></button>`;
+  }).join('');
+  return `<div class="card weekboard">
+    <div class="row between"><div class="lbl">This week · ${esc(ctx.phase.short)}</div><div class="muted small">${cur}/4 done</div></div>
+    ${rows}
+    ${ctx.phase.layoutNote ? `<div class="hint">💡 ${esc(ctx.phase.layoutNote)}</div>` : ''}
+    <div class="opt-head muted small">Optional — only if you've got the gas</div>
+    ${opt}
+  </div>`;
+}
+
+// Month activity calendar — marks days you logged a session; rings today.
+function calendarHtml(s) {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth(), todayD = now.getDate();
+  const startDow = new Date(y, m, 1).getDay();
+  const days = new Date(y, m + 1, 0).getDate();
+  const mm = String(m + 1).padStart(2, '0');
+  const localDay = (isoStr) => { const d = new Date(isoStr); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+  const logged = new Set((s.sessions || []).map((x) => localDay(x.dateISO)));
+  const monthCount = [...logged].filter((d) => d.startsWith(`${y}-${mm}`)).length;
+  const monthName = new Date(y, m, 1).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  const head = ['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d) => `<div class="cal-dow">${d}</div>`).join('');
+  let cells = '';
+  for (let i = 0; i < startDow; i++) cells += '<div class="cal-cell empty"></div>';
+  for (let d = 1; d <= days; d++) {
+    const iso = `${y}-${mm}-${String(d).padStart(2, '0')}`;
+    const trained = logged.has(iso);
+    cells += `<div class="cal-cell ${d === todayD ? 'today' : ''} ${trained ? 'trained' : ''}">${d}${trained ? '<span class="cal-dot"></span>' : ''}</div>`;
+  }
+  return `<div class="card">
+    <div class="row between"><div class="lbl">Activity — ${esc(monthName)}</div><div class="muted small">${monthCount} day${monthCount === 1 ? '' : 's'} this month</div></div>
+    <div class="cal-grid head">${head}</div>
+    <div class="cal-grid">${cells}</div>
+  </div>`;
 }
 function readinessForm() {
   const metric = (f, label, lo, hi) => `<div class="rd-metric"><div class="rd-label">${label}<span class="muted small"> ${lo} → ${hi}</span></div>${chipsRd(f)}</div>`;
@@ -243,6 +285,8 @@ function bodyCardHtml(latest, today) {
         <label class="fld">Sleep (h)<input id="b-sleep" type="number" inputmode="decimal" value="${tv(today && today.sleepHrs)}"></label>
       </div>
       <button class="btn-primary" data-act="save-body">Save</button>
+      <div class="paste-line"><input id="b-paste" placeholder="or paste: weight:198,hrv:70,sleep:7.2"><button class="btn-ghost" data-act="paste-health">Add</button></div>
+      <div class="muted small">Android tip: screenshot your Hume app, send it to Claude, and paste back the line it gives you.</div>
     </details>
   </div>`;
 }
@@ -611,6 +655,7 @@ function onClick(e) {
     case 'import': document.getElementById('import-file').click(); break;
     case 'import-health': document.getElementById('health-file').click(); break;
     case 'save-body': saveBody(); break;
+    case 'paste-health': pasteHealth(); break;
     case 'reset': doReset(); break;
   }
 }
@@ -817,6 +862,14 @@ function saveBody() {
   store.logBody(entry);
   render();
   toast('Body & recovery saved.');
+}
+
+function pasteHealth() {
+  const el = document.getElementById('b-paste');
+  const v = el ? el.value.trim() : '';
+  if (!v) { toast('Paste something like weight:198,hrv:70,sleep:7.2'); return; }
+  if (ingestFromURL(v)) { render(); toast('Health update added.'); }
+  else toast('Nothing recognized — use weight: / hrv: / rhr: / sleep: / bf:');
 }
 
 function importHealthFile(file) {

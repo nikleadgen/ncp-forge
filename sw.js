@@ -1,6 +1,6 @@
 // sw.js — offline-first service worker. Precache the app shell; serve cache-first.
 // Bump CACHE on any shell change to force an update.
-const CACHE = 'forge-v2';
+const CACHE = 'forge-v3';
 const SHELL = [
   './',
   './index.html',

@@ -19,6 +19,15 @@ sleep nudge your daily readiness (low HRV or <6 h sleep automatically eases the 
 3. In Forge: **Settings → Health data → Import weight / HRV / sleep (CSV)** and pick the file.
    Forge matches columns by name (date, weight, HRV, resting HR, sleep, body fat) — one entry per day.
 
+## On Android (your phone) — the easy paths
+You're on Android, so the iPhone Shortcut below doesn't apply. Use either:
+- **Paste a line** — glance at the Hume app, then on Forge's Home screen tap *Body & recovery → Log
+  today* and type the numbers, or paste a line like `weight:198,hrv:70,rhr:52,sleep:7.2` into the paste box.
+- **Screenshot → Claude → paste** — screenshot the Hume app, send it to Claude, and Claude reads it and
+  hands you back that exact paste line (and can fold the trend into plan tweaks). No setup, fully hands-off.
+- **Advanced (Tasker / MacroDroid)** — Hume also syncs to Google Health Connect; a macro can read those
+  values and open `…/?ingest=weight:..,hrv:..,sleep:..` to auto-fill Forge each morning.
+
 ## 3. Auto every morning (iPhone Shortcut) — set once, forget
 This pushes today's numbers into Forge automatically.
 

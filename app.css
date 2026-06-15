@@ -198,6 +198,30 @@ body[data-route="workout"] .bottom-nav,body[data-route="onboarding"] .bottom-nav
 code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 details summary{cursor:pointer}
 
+/* week board */
+.weekboard .wk-row{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+.weekboard .wk-row.upcoming{opacity:.6}
+.wk-ic{width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;background:var(--bg2);color:var(--muted);flex:none}
+.wk-row.done .wk-ic{background:rgba(54,211,153,.16);color:var(--accent)}
+.wk-row.next .wk-ic{background:var(--accent);color:#08220f}
+.wk-info{flex:1;min-width:0}
+.wk-name{font-weight:700}
+.wk-start{width:auto;flex:none;padding:11px 16px;font-size:14px}
+.opt-head{margin:12px 0 8px;text-transform:uppercase;letter-spacing:.06em}
+/* calendar */
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px}
+.cal-grid.head{margin:8px 0 5px}
+.cal-dow{text-align:center;font-size:10px;color:var(--muted);font-weight:700}
+.cal-cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;background:var(--bg2);border-radius:8px;font-size:12px;font-weight:600;position:relative}
+.cal-cell.empty{background:transparent}
+.cal-cell.trained{background:rgba(54,211,153,.18);color:var(--accent)}
+.cal-cell.today{outline:2px solid var(--accent2);outline-offset:-2px}
+.cal-dot{width:4px;height:4px;border-radius:50%;background:var(--accent);position:absolute;bottom:4px}
+/* paste line */
+.paste-line{display:flex;gap:8px;margin:10px 0 6px}
+.paste-line input{flex:1;min-width:0;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:11px;color:var(--txt);font-size:14px}
+.paste-line .btn-ghost{flex:none;padding:11px 16px}
+
 /* toast */
 #toast{position:fixed;left:50%;transform:translateX(-50%) translateY(20px);bottom:calc(80px + var(--safe-b));
   background:var(--card2);border:1px solid var(--accent);color:var(--txt);padding:12px 18px;border-radius:12px;
