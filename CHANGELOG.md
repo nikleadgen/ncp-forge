@@ -2,6 +2,15 @@
 
 All notable changes to Forge (NCP Games Trainer).
 
+## [0.2.0] — 2026-06-14 — Hume/recovery bridge + live deploy
+- **Body & recovery log** — weight, body-fat %, resting HR, HRV, sleep (schema v2 migration).
+- HRV + short-sleep now refine daily readiness; bodyweight trend added to Progress; weight feeds the
+  2×BW deadlift target + bodyweight-relative loads.
+- **Health import** — CSV (Apple Health / Health Auto Export columns) + a URL-param `?ingest=` path so an
+  iPhone Shortcut can auto-push Hume→Apple Health→Forge each morning. Guide: `docs/CONNECT-HUME.md`.
+- **Deployed** — public repo `nikleadgen/ncp-forge`, served via GitHub Pages (branch `main`, /root).
+  SW cache bumped to `forge-v2` so installed apps pull the update.
+
 ## [0.1.0] — 2026-06-14 — Initial build
 - Project scaffolded from claude-starter-kit; CLAUDE.md tailored; registered in fleet REGISTRY (`ncp-forge`).
 - Deep multi-agent research run (8 agents, 60+ cited sources) + independent S&C red-team of the macrocycle.
