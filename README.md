@@ -32,6 +32,10 @@ Any static host works too (Cloudflare Pages, Netlify, GitHub Pages) — just upl
 2. Open the URL in **Safari (iPhone)** or **Chrome (Android)**.
 3. **Share → Add to Home Screen.** It installs as a full-screen app and works **offline** after first load.
 
+**Updates are automatic.** The service worker is network-first, so the installed app always loads the
+latest version when you open it online, and auto-reloads if a new version went live while it was open.
+The current version is shown at the bottom of Settings.
+
 ## Your data
 - Everything lives in your browser on your device (`localStorage`). No accounts, no servers, no tracking.
 - **Back up anytime:** Settings → Export (downloads a `.json`). Restore with Import.

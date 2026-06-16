@@ -12,10 +12,19 @@ function boot() {
   ui.render();
   window.addEventListener('hashchange', ui.render);
 
-  // Offline support — only works over http(s)/localhost, silently skipped on file://
+  // Live updates + offline. Network-first SW (see sw.js); auto-reload when a new version activates.
   if ('serviceWorker' in navigator) {
+    let refreshing = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshing) return; refreshing = true; location.reload();
+    });
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch(() => { /* offline still works once cached */ });
+      navigator.serviceWorker.register('sw.js').then((reg) => {
+        reg.update();
+        // check for a new version whenever the app is reopened/refocused, and hourly while open
+        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') reg.update(); });
+        setInterval(() => reg.update(), 60 * 60 * 1000);
+      }).catch(() => { /* offline still works once cached */ });
     });
   }
 }

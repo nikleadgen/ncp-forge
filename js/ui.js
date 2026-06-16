@@ -608,7 +608,7 @@ function renderSettings() {
         <button class="btn-danger wide" data-act="reset">Reset everything</button>
         ${s.meta.lastBackupISO ? `<div class="muted small">Last backup ${fmtDate(s.meta.lastBackupISO)}</div>` : ''}
       </div>
-      <div class="card muted small">Forge · local-first PWA · not medical advice. Built for the New Christendom Press Games.</div>
+      <div class="card muted small">Forge v${store.VERSION} · auto-updates when online · not medical advice. Built for the New Christendom Press Games.</div>
     </main>`;
 }
 function maxRow(label, id, val, u) {

@@ -1,6 +1,6 @@
 // sw.js — offline-first service worker. Precache the app shell; serve cache-first.
 // Bump CACHE on any shell change to force an update.
-const CACHE = 'forge-v5';
+const CACHE = 'forge-v6';
 const SHELL = [
   './',
   './index.html',
@@ -30,16 +30,17 @@ self.addEventListener('activate', (e) => {
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
-  // Navigations → app shell (SPA) with offline fallback.
-  if (req.mode === 'navigate') {
-    e.respondWith(fetch(req).catch(() => caches.match('./index.html')));
-    return;
-  }
-  e.respondWith(
-    caches.match(req).then((hit) => hit || fetch(req).then((res) => {
-      const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put(req, copy)).catch(() => {});
-      return res;
-    }).catch(() => hit))
-  );
+  // Network-first: always fresh when online (updates land automatically), cache fallback when offline.
+  e.respondWith((async () => {
+    try {
+      const fresh = await fetch(req);
+      if (fresh && fresh.ok) { const c = await caches.open(CACHE); c.put(req, fresh.clone()); }
+      return fresh;
+    } catch (err) {
+      const cached = await caches.match(req);
+      if (cached) return cached;
+      if (req.mode === 'navigate') return caches.match('./index.html');
+      return Response.error();
+    }
+  })());
 });

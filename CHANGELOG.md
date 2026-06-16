@@ -2,6 +2,13 @@
 
 All notable changes to Forge (NCP Games Trainer).
 
+## [0.3.0] — 2026-06-16 — Live auto-updating PWA (user request)
+- Service worker is now **network-first**: always serves the latest when online, falls back to cache
+  offline. The app **auto-reloads when a new version activates** and checks for updates on every reopen
+  (and hourly while open) — no more stale installed copies. Current version is shown in Settings.
+- One-time: fully close & reopen the installed app once (with signal) to land the new updater; automatic
+  thereafter. SW cache → forge-v6.
+
 ## [0.2.2] — 2026-06-15 — Pain/tweak flag + injury routing (user request)
 - Flag a cranky area (knee / lower back / shoulder / elbow / hip / wrist / ankle) at the end of any
   workout and Forge **trains around it**: swaps to a joint-safe alternative when one exists (e.g. a
