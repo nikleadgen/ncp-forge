@@ -2,6 +2,10 @@
 
 All notable changes to Forge (NCP Games Trainer).
 
+## [0.3.1] — 2026-06-16 — Workout preview (user request)
+- Tap any session on the Home board to expand a quick preview of its exercises (name + sets×reps)
+  before hitting Start. SW cache → forge-v7.
+
 ## [0.3.0] — 2026-06-16 — Live auto-updating PWA (user request)
 - Service worker is now **network-first**: always serves the latest when online, falls back to cache
   offline. The app **auto-reloads when a new version activates** and checks for updates on every reopen

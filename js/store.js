@@ -5,7 +5,7 @@
 
 const KEY = 'forge_state';
 export const SCHEMA_VERSION = 3;
-export const VERSION = '0.3.0'; // shown in Settings; bump on each deploy so updates are verifiable
+export const VERSION = '0.3.1'; // shown in Settings; bump on each deploy so updates are verifiable
 
 function defaultState() {
   return {

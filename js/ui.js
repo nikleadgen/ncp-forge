@@ -11,6 +11,7 @@ let root = null;
 let onbStep = 0;
 const onb = {};            // onboarding scratch
 let rest = { id: null, endAt: 0, dur: 0 };
+const previewOpen = new Set(); // week-board session indices whose exercise preview is expanded
 
 const U = () => (store.get().settings.units || 'lb');
 const esc = (s) => String(s == null ? '' : s).replace(/[<>&"]/g, (m) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[m]));
@@ -208,9 +209,13 @@ function weekBoardHtml(s) {
     const meta = logged ? `${fmtDate(logged.dateISO)} · RPE ${logged.sessionRPE || '—'}` : (status === 'next' ? 'up next' : 'queued');
     rows += `<div class="wk-row ${status}">
       <div class="wk-ic">${icon}</div>
-      <div class="wk-info"><div class="wk-name">${esc(sess.day.name)}</div><div class="muted small">${esc(meta)}</div></div>
+      <button class="wk-info wk-peek" data-act="toggle-preview" data-idx="${i}">
+        <div class="wk-name">${esc(sess.day.name)} <span class="peek-chev" style="${previewOpen.has(i) ? 'transform:rotate(180deg)' : ''}">▾</span></div>
+        <div class="muted small">${esc(meta)}</div>
+      </button>
       ${status === 'next' ? `<button class="btn-primary wk-start" data-act="start" data-optional="">${s.active ? 'Resume' : 'Start'} →</button>` : ''}
-    </div>`;
+    </div>
+    <div class="wk-preview ${previewOpen.has(i) ? 'open' : ''}" id="prev-${i}">${sessionPreviewList(aw, i)}</div>`;
   }
   const opt = program.optionalDays().map((k) => {
     const d = program.COMMON_DAYS[k];
@@ -223,6 +228,35 @@ function weekBoardHtml(s) {
     <div class="opt-head muted small">Optional — only if you've got the gas</div>
     ${opt}
   </div>`;
+}
+
+// Exercise preview for a session (names + scheme summary, no resolve needed — works for any session).
+function sessionPreviewList(aw, i) {
+  const sess = program.getSession(aw, i);
+  return (sess.day.slots || []).map((sl) => {
+    const ex = getExercise(sl.ex);
+    return `<div class="pv-row"><span class="pv-name">${esc(ex.name)}</span><span class="muted small">${esc(slotSummary(sl.scheme))}</span></div>`;
+  }).join('');
+}
+function slotSummary(sc) {
+  switch (sc.t) {
+    case 'strength': case 'topset': return `${sc.sets}×${sc.reps}`;
+    case 'power': return `${sc.sets}×${sc.reps} fast`;
+    case 'bwreps': return `${sc.sets}× ${sc.reps === 'max' ? 'max' : 'reps'}`;
+    case 'amrap': return 'max reps';
+    case 'emom': return `EMOM ${sc.minutes}m`;
+    case 'hold': return `${sc.sets}×${sc.seconds}s`;
+    case 'carry': return `${sc.sets}×${sc.dist}yd`;
+    case 'run':
+      if (sc.mode === 'intervals' || sc.mode === 'norwegian') return `${sc.reps}×${sc.repDist}`;
+      if (sc.mode === 'strides' || sc.mode === 'sprints') return `${sc.reps}× ${sc.repDist || 'strides'}`;
+      if (sc.mode === 'tt') return 'time trial';
+      return `${sc.minutes} min`;
+    case 'metcon': return sc.rounds === 'amrap' ? `AMRAP ${Math.round((sc.timeCap || 1200) / 60)}m` : `${sc.rounds} rounds`;
+    case 'mobility': return `${sc.minutes} min`;
+    case 'test_e1rm': return `heavy ${sc.topReps}`;
+    default: return '';
+  }
 }
 
 // Month activity calendar — marks days you logged a session; rings today.
@@ -642,6 +676,14 @@ function onClick(e) {
     case 'open-readiness': openReadiness(); break;
     // navigation / start
     case 'start': startWorkout(t.dataset.optional || null); break;
+    case 'toggle-preview': {
+      const i = +t.dataset.idx;
+      if (previewOpen.has(i)) previewOpen.delete(i); else previewOpen.add(i);
+      const el = document.getElementById('prev-' + i);
+      if (el) el.classList.toggle('open', previewOpen.has(i));
+      const chev = t.querySelector('.peek-chev'); if (chev) chev.style.transform = previewOpen.has(i) ? 'rotate(180deg)' : '';
+      break;
+    }
     case 'goto': location.hash = t.dataset.href; break;
     // workout
     case 'inc': stepSet(t, +1); break;
