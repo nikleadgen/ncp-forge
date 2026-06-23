@@ -198,22 +198,31 @@ function renderToday() {
 
 // "This week" board — the 4 core sessions with status + a Start on the next one, plus optional days.
 function weekBoardHtml(s) {
-  const aw = s.program.absWeek, cur = s.program.sessionInWeek;
+  const aw = s.program.absWeek;
   const ctx = program.planContext(aw);
+  const res = store.weekResolution(aw);
+  const suggested = store.suggestedIndex(aw);
+  const activeIdx = (s.active && !s.active.optional) ? s.active.sessionInWeek : null;
+  const doneCount = Object.keys(res.done).length;
   let rows = '';
   for (let i = 0; i < 4; i++) {
     const sess = program.getSession(aw, i);
-    const logged = (s.sessions || []).find((x) => x.absWeek === aw && x.sessionInWeek === i);
-    const status = (logged || i < cur) ? 'done' : (i === cur ? 'next' : 'upcoming');
-    const icon = status === 'done' ? '✓' : (status === 'next' ? '▶' : i + 1);
-    const meta = logged ? `${fmtDate(logged.dateISO)} · RPE ${logged.sessionRPE || '—'}` : (status === 'next' ? 'up next' : 'queued');
+    const isDone = !!res.done[i], isSkip = !!res.skipped[i];
+    const status = isDone ? 'done' : (isSkip ? 'skipped' : (i === suggested ? 'next' : 'upcoming'));
+    const icon = isDone ? '✓' : (isSkip ? '–' : (i === suggested ? '▶' : i + 1));
+    let meta;
+    if (isDone) meta = `${esc(fmtDate(res.doneDate[i]))} · RPE ${res.doneRPE[i] || '—'}`;
+    else if (isSkip) meta = `skipped · <button class="link-inline" data-act="unskip" data-idx="${i}">undo</button>`;
+    else meta = `${i === suggested ? 'up next' : 'queued'} · <button class="link-inline" data-act="skip" data-idx="${i}">skip</button>`;
+    const canStart = !isDone && !isSkip && (!s.active || activeIdx === i);
+    const startBtn = canStart ? `<button class="wk-start ${i === suggested ? 'btn-primary' : 'btn-ghost'}" data-act="start" data-idx="${i}">${activeIdx === i ? 'Resume' : 'Start'}</button>` : '';
     rows += `<div class="wk-row ${status}">
       <div class="wk-ic">${icon}</div>
-      <button class="wk-info wk-peek" data-act="toggle-preview" data-idx="${i}">
-        <div class="wk-name">${esc(sess.day.name)} <span class="peek-chev" style="${previewOpen.has(i) ? 'transform:rotate(180deg)' : ''}">▾</span></div>
-        <div class="muted small">${esc(meta)}</div>
-      </button>
-      ${status === 'next' ? `<button class="btn-primary wk-start" data-act="start" data-optional="">${s.active ? 'Resume' : 'Start'} →</button>` : ''}
+      <div class="wk-mid">
+        <button class="wk-peek" data-act="toggle-preview" data-idx="${i}"><span class="wk-name">${esc(sess.day.name)} <span class="peek-chev" style="${previewOpen.has(i) ? 'transform:rotate(180deg)' : ''}">▾</span></span></button>
+        <div class="muted small wk-meta">${meta}</div>
+      </div>
+      ${startBtn}
     </div>
     <div class="wk-preview ${previewOpen.has(i) ? 'open' : ''}" id="prev-${i}">${sessionPreviewList(aw, i)}</div>`;
   }
@@ -222,7 +231,8 @@ function weekBoardHtml(s) {
     return `<button class="opt-row" data-act="start" data-optional="${k}"><span>＋ ${esc(d.name)}</span><span class="muted small">${esc(optPreview(k))}</span></button>`;
   }).join('');
   return `<div class="card weekboard">
-    <div class="row between"><div class="lbl">This week · ${esc(ctx.phase.short)}</div><div class="muted small">${cur}/4 done</div></div>
+    <div class="row between"><div class="lbl">Week ${aw + 1} · ${esc(ctx.phase.short)}</div><div class="muted small">${doneCount}/4 done</div></div>
+    <div class="muted small wb-sub">Do these in any order. Skip what you can't get to — the week only moves on once all four are done or skipped, so you never lose a lift.</div>
     ${rows}
     ${ctx.phase.layoutNote ? `<div class="hint">💡 ${esc(ctx.phase.layoutNote)}</div>` : ''}
     <div class="opt-head muted small">Optional — only if you've got the gas</div>
@@ -337,9 +347,10 @@ function optPreview(k) {
 }
 
 // ============================ WORKOUT ============================
-function buildActive(s, optionalDayKey) {
+function buildActive(s, optionalDayKey, index) {
+  const idx = optionalDayKey ? 0 : (index != null ? index : store.suggestedIndex(s.program.absWeek));
   const rd = store.todayReadiness();
-  const res = engine.resolveSessionAt(s, s.program.absWeek, s.program.sessionInWeek, { readiness: rd, optionalDayKey: optionalDayKey || null });
+  const res = engine.resolveSessionAt(s, s.program.absWeek, idx, { readiness: rd, optionalDayKey: optionalDayKey || null });
   const entries = res.blocks.map((b) => ({
     exerciseId: b.exerciseId, name: b.name, kind: b.kind, type: b.type, prescription: b.prescription,
     cues: b.cues, note: b.note, demo: b.demo, rest: b.rest, paceHint: b.paceHint, detail: b.detail,
@@ -613,7 +624,7 @@ function renderSettings() {
       <div class="card">
         <div class="lbl">Position in plan</div>
         <label class="kv"><span>Current week (1–52)</span><input class="mini-in" data-act="set-week" type="number" inputmode="numeric" value="${s.program.absWeek + 1}"></label>
-        <label class="kv"><span>Session in week (1–4)</span><input class="mini-in" data-act="set-sess" type="number" inputmode="numeric" value="${s.program.sessionInWeek + 1}"></label>
+        <div class="muted small">Sessions advance by completion, not the calendar — do them in any order on the Home board.</div>
       </div>
       <div class="card">
         <div class="lbl">Niggles & tweaks</div>
@@ -675,7 +686,9 @@ function onClick(e) {
     case 'save-readiness': saveReadiness(); break;
     case 'open-readiness': openReadiness(); break;
     // navigation / start
-    case 'start': startWorkout(t.dataset.optional || null); break;
+    case 'start': startWorkout(t.dataset.optional || null, (t.dataset.idx != null && t.dataset.idx !== '') ? +t.dataset.idx : null); break;
+    case 'skip': store.skipSession(+t.dataset.idx); render(); toast("Skipped — it comes back around next week."); break;
+    case 'unskip': store.unskipSession(+t.dataset.idx); render(); break;
     case 'toggle-preview': {
       const i = +t.dataset.idx;
       if (previewOpen.has(i)) previewOpen.delete(i); else previewOpen.add(i);
@@ -727,8 +740,7 @@ function onChange(e) {
   if (t.dataset.act === 'set-sound') store.setSettings({ sound: t.checked });
   if (t.dataset.act === 'set-rest') store.setSettings({ restDefault: +t.value || 120 });
   if (t.dataset.act === 'set-max') setMaxEdit(t.dataset.id, +t.value);
-  if (t.dataset.act === 'set-week') { store.setPointer({ absWeek: (+t.value || 1) - 1 }); }
-  if (t.dataset.act === 'set-sess') { store.setPointer({ sessionInWeek: (+t.value || 1) - 1 }); }
+  if (t.dataset.act === 'set-week') { store.setPointer({ absWeek: (+t.value || 1) - 1 }); render(); }
 }
 
 function toggleInj(id) {
@@ -780,10 +792,10 @@ function saveReadiness() {
 function openReadiness() { f4(); render(); }
 function f4() { ['sleep', 'soreness', 'energy', 'stress', 'motivation'].forEach((k) => delete onb['rd_' + k]); store.update((s) => { const day = new Date().toISOString().slice(0, 10); s.readiness = s.readiness.filter((r) => r.dateISO.slice(0, 10) !== day); }); }
 
-function startWorkout(optionalDayKey) {
+function startWorkout(optionalDayKey, index) {
   const s = store.get();
-  if (s.active && !optionalDayKey) { location.hash = '#/workout'; render(); return; }
-  const active = buildActive(s, optionalDayKey);
+  if (s.active) { location.hash = '#/workout'; render(); return; } // finish or pause the current one first
+  const active = buildActive(s, optionalDayKey, index);
   store.startSession(active);
   location.hash = '#/workout';
   render();

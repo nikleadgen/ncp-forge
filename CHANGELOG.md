@@ -2,6 +2,14 @@
 
 All notable changes to Forge (NCP Games Trainer).
 
+## [0.4.0] — 2026-06-18 — Flexible week: start any / skip / never lose a lift (user request)
+- The week is now a **completion-based queue, not a calendar week**: start *any* session in any order,
+  **skip** one you can't do (with undo), and the week only advances to the next once all four are
+  done-or-skipped — so a missed session is never lost, you just do the next one whenever.
+- Home board shows each session's real status + date done / RPE, the suggested "up next", and a clear
+  note explaining the model. Done state is derived from your actual logged sessions (date-aware).
+- SW cache → forge-v8.
+
 ## [0.3.1] — 2026-06-16 — Workout preview (user request)
 - Tap any session on the Home board to expand a quick preview of its exercises (name + sets×reps)
   before hitting Start. SW cache → forge-v7.

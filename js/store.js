@@ -4,8 +4,8 @@
 // bump SCHEMA_VERSION and add a function to MIGRATIONS.
 
 const KEY = 'forge_state';
-export const SCHEMA_VERSION = 3;
-export const VERSION = '0.3.1'; // shown in Settings; bump on each deploy so updates are verifiable
+export const SCHEMA_VERSION = 4;
+export const VERSION = '0.4.0'; // shown in Settings; bump on each deploy so updates are verifiable
 
 function defaultState() {
   return {
@@ -17,7 +17,7 @@ function defaultState() {
     maxes: {}, // see seedMaxes(): { deadlift:{e1rm,updated}, ..., pull_up:{maxReps,updated}, mile:{seconds,updated} }
     // program pointer. Training advances by completed sessions, not the calendar,
     // so a missed day never desyncs the plan.
-    program: { startDateISO: null, absWeek: 0, sessionInWeek: 0 },
+    program: { startDateISO: null, absWeek: 0, sessionInWeek: 0, skipped: {} },
     readiness: [],   // [{dateISO, sleep, soreness, energy, stress, motivation, score}]
     body: [],        // [{dateISO, weight, bodyfat, restingHR, hrv, sleepHrs}] — Hume / Apple Health bridge
     tweaks: [],      // [{area, sinceISO}] — flagged niggles the engine trains around
@@ -41,6 +41,8 @@ const MIGRATIONS = [
     }
     return s;
   },
+  // v3 → v4: add the skipped-session map (flexible, completion-based week progression)
+  (s) => { if (s.program && !s.program.skipped) s.program.skipped = {}; return s; },
 ];
 
 function migrate(state) {
@@ -178,18 +180,42 @@ export function commitSession(session) {
         });
       }
     }
-    advancePointer(s);
+    advanceIfComplete(s);
   });
 }
 
-// Move to the next session in the week; roll to next week after the 4th.
-function advancePointer(s) {
-  s.program.sessionInWeek = (s.program.sessionInWeek || 0) + 1;
-  if (s.program.sessionInWeek >= 4) {
-    s.program.sessionInWeek = 0;
-    s.program.absWeek = (s.program.absWeek || 0) + 1;
-  }
+// A week advances once all 4 sessions are RESOLVED (done or skipped) — never by the calendar.
+// So a missed session is never lost: you just do the next one, even a week later.
+function advanceIfComplete(s) {
+  const W = s.program.absWeek;
+  s.program.skipped = s.program.skipped || {};
+  const done = {};
+  for (const x of s.sessions) if (x.absWeek === W && !x.optional && typeof x.sessionInWeek === 'number') done[x.sessionInWeek] = true;
+  let resolved = 0;
+  for (let i = 0; i < 4; i++) if (done[i] || s.program.skipped[`${W}:${i}`]) resolved++;
+  if (resolved >= 4 && W < 51) { s.program.absWeek = W + 1; s.program.sessionInWeek = 0; }
 }
+
+// Resolution status of a week (derived from the session log + skip map).
+export function weekResolution(absWeek) {
+  const s = get();
+  const done = {}, doneDate = {}, doneRPE = {};
+  for (const x of (s.sessions || [])) {
+    if (x.absWeek === absWeek && !x.optional && typeof x.sessionInWeek === 'number') {
+      done[x.sessionInWeek] = true; doneDate[x.sessionInWeek] = x.dateISO; doneRPE[x.sessionInWeek] = x.sessionRPE;
+    }
+  }
+  const skipped = {};
+  for (const k of Object.keys((s.program.skipped) || {})) { const p = k.split(':'); if (+p[0] === absWeek) skipped[+p[1]] = s.program.skipped[k]; }
+  return { done, doneDate, doneRPE, skipped };
+}
+export function suggestedIndex(absWeek) {
+  const { done, skipped } = weekResolution(absWeek);
+  for (let i = 0; i < 4; i++) if (!done[i] && !skipped[i]) return i;
+  return 0;
+}
+export function skipSession(index) { update((s) => { s.program.skipped = s.program.skipped || {}; s.program.skipped[`${s.program.absWeek}:${index}`] = new Date().toISOString(); advanceIfComplete(s); }); }
+export function unskipSession(index) { update((s) => { if (s.program.skipped) delete s.program.skipped[`${s.program.absWeek}:${index}`]; }); }
 
 // Manual pointer control (Settings / Plan view "jump to week").
 export function setPointer({ absWeek, sessionInWeek }) {
