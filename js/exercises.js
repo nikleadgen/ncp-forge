@@ -196,3 +196,17 @@ export function resolveExercise(id, excluded = new Set()) {
   for (const s of ex.sub || []) if (!excluded.has(s)) return s;
   return id; // nothing better; caller decides
 }
+
+// Sensible swap menu for a lift: curated subs first, then same-pattern movements.
+// Powers the in-workout "⇄ Swap" picker. Patterns that aren't a discrete loadable
+// lift (runs, mobility, metcons, benchmarks) don't offer swaps.
+const NON_SWAP_PATTERNS = new Set(['mobility', 'aerobic', 'anaerobic', 'speed', 'test', 'metcon', 'fullbody', 'core']);
+export function alternativesFor(id) {
+  const ex = getExercise(id);
+  if (NON_SWAP_PATTERNS.has(ex.pattern)) return [];
+  const out = [];
+  const push = (x) => { if (x && x !== id && EXERCISES[x] && !out.includes(x)) out.push(x); };
+  (ex.sub || []).forEach(push);                                    // curated subs first
+  for (const key of Object.keys(EXERCISES)) if (EXERCISES[key].pattern === ex.pattern) push(key);
+  return out;
+}

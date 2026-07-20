@@ -4,15 +4,16 @@
 // bump SCHEMA_VERSION and add a function to MIGRATIONS.
 
 const KEY = 'forge_state';
-export const SCHEMA_VERSION = 4;
-export const VERSION = '0.4.0'; // shown in Settings; bump on each deploy so updates are verifiable
+export const SCHEMA_VERSION = 5;
+export const VERSION = '0.5.0'; // shown in Settings; bump on each deploy so updates are verifiable
 
 function defaultState() {
   return {
     schemaVersion: SCHEMA_VERSION,
     // profile: set during onboarding. null = first run.
     profile: null, // { name, sex, age, heightIn, bodyweight, units, injuries:[], experience, hasPullupBar, sandbagMax }
-    settings: { units: 'lb', restDefault: 150, sound: true, autoRest: true },
+    // exPrefs: your saved exercise swaps { plannedExId: chosenExId }. equipment: gear you can load.
+    settings: { units: 'lb', restDefault: 150, sound: true, autoRest: true, exPrefs: {}, equipment: { sandbag: false } },
     // maxes: the engine's working model of the athlete. Updated automatically from logs.
     maxes: {}, // see seedMaxes(): { deadlift:{e1rm,updated}, ..., pull_up:{maxReps,updated}, mile:{seconds,updated} }
     // program pointer. Training advances by completed sessions, not the calendar,
@@ -43,6 +44,13 @@ const MIGRATIONS = [
   },
   // v3 → v4: add the skipped-session map (flexible, completion-based week progression)
   (s) => { if (s.program && !s.program.skipped) s.program.skipped = {}; return s; },
+  // v4 → v5: add exercise-swap preferences + equipment availability (sandbag proxying)
+  (s) => {
+    s.settings = s.settings || {};
+    if (!s.settings.exPrefs) s.settings.exPrefs = {};
+    if (!s.settings.equipment) s.settings.equipment = { sandbag: false };
+    return s;
+  },
 ];
 
 function migrate(state) {
@@ -107,6 +115,19 @@ export function setProfile(profile) {
 }
 
 export function setSettings(patch) { update((s) => { Object.assign(s.settings, patch); }); }
+
+// Exercise swaps — your standing preference for a planned lift (e.g. floor press → bench press).
+export function setExPref(baseId, toId) {
+  update((s) => {
+    s.settings.exPrefs = s.settings.exPrefs || {};
+    if (toId && toId !== baseId) s.settings.exPrefs[baseId] = toId;
+    else delete s.settings.exPrefs[baseId];
+  });
+}
+export function clearExPref(baseId) { setExPref(baseId, null); }
+
+// Equipment availability — off routes dependent lifts to proxies (see engine SANDBAG_PROXY).
+export function setEquip(patch) { update((s) => { s.settings.equipment = Object.assign({ sandbag: false }, s.settings.equipment, patch); }); }
 
 export function seedMaxes(maxes) { update((s) => { Object.assign(s.maxes, maxes); }); }
 

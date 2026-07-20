@@ -9,8 +9,32 @@
 //
 // All numbers trace to docs/PROGRAM-SCIENCE.md.
 
-import { getExercise } from './exercises.js';
+import { getExercise, EXERCISES } from './exercises.js';
 import { planContext, getSession, getDay, COMMON_DAYS, dateForWeek, MACRO } from './program.js';
+
+// ---------- equipment routing (proxy lifts you can't yet load) ----------
+// The only odd-object work in the plan is sandbag-based. Until a loaded sandbag is
+// ready (settings.equipment.sandbag), route those lifts to proxies using gear on hand:
+// explosive shoulder/clean → dumbbell cleans, zercher squat → goblet, carry → DB farmer.
+// Flip the toggle on and the real sandbag work returns automatically — no data lost.
+const SANDBAG_PROXY = {
+  sandbag_shoulder: 'kb_clean',
+  sandbag_clean: 'kb_clean',
+  sandbag_zercher: 'goblet_squat',
+  sandbag_carry: 'farmer_carry',
+};
+export function sandbagReady(state) { return !!(state && state.settings && state.settings.equipment && state.settings.equipment.sandbag); }
+
+// Resolve a planned exercise to what the athlete actually does today: their saved swap
+// preference wins, then equipment routing. Returns { id, proxied } (proxied = sandbag→gear).
+function routeExercise(state, baseEx) {
+  const prefs = (state && state.settings && state.settings.exPrefs) || {};
+  let id = baseEx, proxied = false;
+  if (prefs[baseEx] && EXERCISES[prefs[baseEx]]) id = prefs[baseEx];
+  if (getExercise(id).load === 'sandbag' && !sandbagReady(state) && SANDBAG_PROXY[id]) { id = SANDBAG_PROXY[id]; proxied = true; }
+  return { id, proxied };
+}
+export function effectiveExId(state, exId) { return routeExercise(state, exId).id; }
 
 // ---------- strength math ----------
 // Reps-to-failure → %1RM (RTS/Helms style). Index = reps you could do to true failure.
@@ -245,11 +269,32 @@ export function resolveSessionAt(state, absWeek, sessionInWeek, opts = {}) {
   };
 }
 
+// Re-resolve a single slot of the ACTIVE session (used by the in-workout "⇄ Swap").
+// forcedExId forces that exercise (skips pref/equipment routing); null re-routes normally.
+export function represcribeSlot(state, active, slotId, forcedExId) {
+  const profile = state.profile;
+  const units = (state.settings && state.settings.units) || 'lb';
+  const ctx = planContext(active.absWeek);
+  const day = active.optionalDayKey ? COMMON_DAYS[active.optionalDayKey] : getSession(active.absWeek, active.sessionInWeek).day;
+  let slot = (day.slots || []).find((sl) => sl.id === slotId);
+  if (!slot && slotId === 'wu') slot = COMMON_DAYS.warmup.slots[0];
+  if (!slot) return null;
+  const rs = combinedReadiness(state);
+  const acwr = computeACWR(state);
+  const excluded = excludedAreas(state);
+  return resolveSlot(slot, { state, profile, units, wave: ctx.wave, rs, damp: acwrDamp(acwr), ctx, excluded, forcedEx: forcedExId || null });
+}
+
 function setsCount(base, volMult) { return Math.max(1, Math.min(base + 1, Math.round(base * volMult))); }
 
 function resolveSlot(slot, c) {
-  let exId = slot.ex;
+  const baseEx = slot.ex;
+  // a forced exercise (an explicit in-workout swap) skips pref/equipment routing; otherwise route.
+  let exId, proxied = false;
+  if (c.forcedEx) exId = c.forcedEx;
+  else { const r = routeExercise(c.state, baseEx); exId = r.id; proxied = r.proxied; }
   let ex = getExercise(exId);
+  const proxyNote = proxied ? `No loaded sandbag yet — doing this as ${ex.name}.` : '';
   // route around flagged niggles: substitute to a safe alternative, else lighten + caution
   let routeMult = 1, cautionNote = '';
   if (c.excluded && c.excluded.size && intersects(areasFor(exId), c.excluded)) {
@@ -261,10 +306,13 @@ function resolveSlot(slot, c) {
   const sc = slot.scheme;
   const volMult = c.wave.volMult * c.rs.volMult * c.damp;
   const intMult = c.wave.intMult * c.rs.loadMult * routeMult;
+  // when proxied, drop the sandbag-specific coaching note (it no longer applies) — keep the proxy note.
+  const leadNote = [cautionNote, proxyNote].filter(Boolean).join(' ');
+  const bodyNote = proxied ? '' : (sc.note || slot.note || '');
   const base = {
-    id: slot.id, exerciseId: exId, name: ex.name, unit: ex.unit, loadType: ex.load,
+    id: slot.id, exerciseId: exId, baseExId: baseEx, name: ex.name, unit: ex.unit, loadType: ex.load,
     pattern: ex.pattern, cues: ex.cues || [], demo: ex.demo, sub: ex.sub || [],
-    note: (cautionNote ? cautionNote + (sc.note || slot.note ? ' ' : '') : '') + (sc.note || slot.note || ''),
+    note: [leadNote, bodyNote].filter(Boolean).join(' '),
     rest: sc.rest || (c.state.settings && c.state.settings.restDefault) || 120,
     type: sc.t, caution: !!cautionNote,
   };
@@ -338,7 +386,7 @@ function resolveSlot(slot, c) {
       return resolveRun(base, sc, c, ex);
     }
     case 'metcon': {
-      const items = (sc.items || []).map((it) => ({ name: getExercise(it.ex).name, reps: it.reps }));
+      const items = (sc.items || []).map((it) => ({ name: getExercise(effectiveExId(c.state, it.ex)).name, reps: it.reps }));
       const roundsLabel = sc.rounds === 'amrap' ? `AMRAP ${Math.round((sc.timeCap || 1200) / 60)} min` : `${sc.rounds} rounds`;
       return { ...base, kind: 'metcon', rounds: sc.rounds, items, timeCap: sc.timeCap,
         prescription: roundsLabel + ' · ' + items.map((i) => `${i.reps} ${i.name}`).join(' / '),

@@ -4,7 +4,7 @@
 import * as store from './store.js';
 import * as engine from './engine.js';
 import * as program from './program.js';
-import { getExercise } from './exercises.js';
+import { getExercise, alternativesFor } from './exercises.js';
 import { lineChart, barChart, gauge, progressBar } from './charts.js';
 
 let root = null;
@@ -242,9 +242,10 @@ function weekBoardHtml(s) {
 
 // Exercise preview for a session (names + scheme summary, no resolve needed — works for any session).
 function sessionPreviewList(aw, i) {
+  const st = store.get();
   const sess = program.getSession(aw, i);
   return (sess.day.slots || []).map((sl) => {
-    const ex = getExercise(sl.ex);
+    const ex = getExercise(engine.effectiveExId(st, sl.ex));
     return `<div class="pv-row"><span class="pv-name">${esc(ex.name)}</span><span class="muted small">${esc(slotSummary(sl.scheme))}</span></div>`;
   }).join('');
 }
@@ -347,18 +348,22 @@ function optPreview(k) {
 }
 
 // ============================ WORKOUT ============================
-function buildActive(s, optionalDayKey, index) {
-  const idx = optionalDayKey ? 0 : (index != null ? index : store.suggestedIndex(s.program.absWeek));
-  const rd = store.todayReadiness();
-  const res = engine.resolveSessionAt(s, s.program.absWeek, idx, { readiness: rd, optionalDayKey: optionalDayKey || null });
-  const entries = res.blocks.map((b) => ({
-    exerciseId: b.exerciseId, name: b.name, kind: b.kind, type: b.type, prescription: b.prescription,
+// Map a resolved engine block → a workout entry (fresh, nothing logged yet).
+function entryFromBlock(b) {
+  return {
+    id: b.id, baseExId: b.baseExId, exerciseId: b.exerciseId, name: b.name, kind: b.kind, type: b.type, prescription: b.prescription,
     cues: b.cues, note: b.note, demo: b.demo, rest: b.rest, paceHint: b.paceHint, detail: b.detail,
     mode: b.mode, minutes: b.minutes, perMinute: b.perMinute, rounds: b.rounds, items: b.items, timeCap: b.timeCap,
     loadType: b.loadType, isTest: b.isTest, targetRir: b.targetRir, caution: b.caution,
     sets: (b.sets || []).map((st) => ({ ...st, done: false, rpe: null, rir: null })),
     resultSeconds: null, resultRounds: null, topWeight: null, result: '',
-  }));
+  };
+}
+function buildActive(s, optionalDayKey, index) {
+  const idx = optionalDayKey ? 0 : (index != null ? index : store.suggestedIndex(s.program.absWeek));
+  const rd = store.todayReadiness();
+  const res = engine.resolveSessionAt(s, s.program.absWeek, idx, { readiness: rd, optionalDayKey: optionalDayKey || null });
+  const entries = res.blocks.map(entryFromBlock);
   return {
     startedAt: new Date().toISOString(), dateISO: new Date().toISOString(),
     absWeek: res.absWeek, sessionInWeek: res.sessionInWeek, dayKey: res.dayKey, dayName: res.dayName,
@@ -416,8 +421,43 @@ function renderBlock(b, bi) {
     ${b.detail ? `<div class="muted small">${esc(b.detail)}</div>` : ''}
     ${b.paceHint ? `<div class="hint">🏃 ${esc(b.paceHint)}</div>` : ''}
     ${body}
+    ${swapControl(b, bi)}
     ${cues ? `<details class="cues"><summary>Form cues</summary><ul>${cues}</ul></details>` : ''}
   </div>`;
+}
+
+// ---- in-workout exercise swap (e.g. floor press → bench press) ----
+const SWAPPABLE_KINDS = ['sets', 'reps', 'hold', 'carry', 'power', 'emom'];
+// Build the swap menu for an entry: alternatives to what's planned AND to what's showing,
+// minus the current lift and anything that would just re-proxy (sandbag while none is ready).
+function swapOptions(entry) {
+  const st = store.get();
+  const base = entry.baseExId || entry.exerciseId;
+  const cur = entry.exerciseId;
+  const ready = engine.sandbagReady(st);
+  const ids = new Set([...alternativesFor(base), ...alternativesFor(cur)]);
+  if (getExercise(base).load !== 'sandbag' || ready) ids.add(base); // allow revert to the plan default
+  const out = [];
+  ids.forEach((id) => {
+    if (id === cur) return;
+    if (getExercise(id).load === 'sandbag' && !ready) return;
+    out.push({ id, name: getExercise(id).name, isDefault: id === base });
+  });
+  out.sort((a, b) => (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0));
+  return out.slice(0, 8);
+}
+function swappable(b) {
+  if (!b || b.id === 'wu' || b.isTest) return false;
+  if (!SWAPPABLE_KINDS.includes(b.kind)) return false;
+  return swapOptions(b).length > 0;
+}
+function swapControl(b, bi) {
+  if (!swappable(b)) return '';
+  const opts = swapOptions(b);
+  return `<details class="swapbox"><summary class="swap-sum">⇄ Swap exercise</summary>
+    <div class="swap-list">${opts.map((o) => `<button class="swap-opt ${o.isDefault ? 'is-default' : ''}" data-act="do-swap" data-bi="${bi}" data-ex="${o.id}">${esc(o.name)}${o.isDefault ? ' · plan default' : ''}</button>`).join('')}</div>
+    <div class="muted small swap-hint">Your pick sticks as the default for this lift. Revert any time in Settings.</div>
+  </details>`;
 }
 
 function stepFor(loadType, field) {
@@ -631,6 +671,16 @@ function renderSettings() {
         ${(s.tweaks || []).length ? (s.tweaks || []).map((t) => `<div class="kv"><span>${esc(cap(engine.areaLabel(t.area)))} <span class="muted small">since ${fmtDate(t.sinceISO)}</span></span><button class="link-btn" data-act="clear-tweak" data-area="${t.area}">✓ Resolved</button></div>`).join('') : '<div class="muted small">None flagged. Flag one at the end of a workout and Forge trains around it automatically.</div>'}
       </div>
       <div class="card">
+        <div class="lbl">Equipment</div>
+        <label class="kv"><span>Loaded sandbag ready</span><input type="checkbox" data-act="set-sandbag" ${engine.sandbagReady(s) ? 'checked' : ''}></label>
+        <div class="muted small">Off — sandbag lifts train as dumbbell/bodyweight proxies (DB cleans, goblet squats, farmer carries). Flip on once your bag's filled and the real sandbag work returns automatically.</div>
+      </div>
+      <div class="card">
+        <div class="lbl">Exercise swaps</div>
+        ${swapsCardHtml(s)}
+        <div class="muted small">Swap any lift mid-workout with <b>⇄ Swap</b>. Your pick becomes the default here.</div>
+      </div>
+      <div class="card">
         <div class="lbl">Health data (Hume / Apple Health)</div>
         <button class="btn-ghost wide" data-act="import-health">⬆ Import weight / HRV / sleep (CSV)</button>
         <input type="file" id="health-file" accept=".csv,text/csv" hidden>
@@ -658,6 +708,12 @@ function renderSettings() {
 }
 function maxRow(label, id, val, u) {
   return `<label class="kv"><span>${label}</span><span class="row"><input class="mini-in" data-act="set-max" data-id="${id}" type="number" inputmode="numeric" value="${esc(val || '')}"><small class="muted">${u}</small></span></label>`;
+}
+function swapsCardHtml(s) {
+  const prefs = (s.settings && s.settings.exPrefs) || {};
+  const keys = Object.keys(prefs);
+  if (!keys.length) return '<div class="muted small">No swaps yet — you\'re running the plan as written.</div>';
+  return keys.map((from) => `<div class="kv"><span>${esc(getExercise(from).name)} → <b>${esc(getExercise(prefs[from]).name)}</b></span><button class="link-btn" data-act="clear-pref" data-id="${from}">↩ revert</button></div>`).join('');
 }
 
 // ============================ helpers ============================
@@ -703,6 +759,7 @@ function onClick(e) {
     case 'dec': stepSet(t, -1); break;
     case 'logset': logSet(+t.dataset.bi, +t.dataset.si); break;
     case 'setrir': setRir(+t.dataset.bi, +t.dataset.si, +t.dataset.val); break;
+    case 'do-swap': doSwap(+t.dataset.bi, t.dataset.ex); break;
     case 'next': moveCursor(+1); break;
     case 'prev': moveCursor(-1); break;
     case 'pause': location.hash = '#/today'; render(); break;
@@ -721,6 +778,7 @@ function onClick(e) {
     case 'save-body': saveBody(); break;
     case 'paste-health': pasteHealth(); break;
     case 'clear-tweak': store.removeTweak(t.dataset.area); render(); toast('Cleared — back in the plan.'); break;
+    case 'clear-pref': store.clearExPref(t.dataset.id); render(); toast('Reverted to the plan default.'); break;
     case 'reset': doReset(); break;
   }
 }
@@ -738,6 +796,7 @@ function onChange(e) {
   if (t.id === 'import-file' && t.files && t.files[0]) importFile(t.files[0]);
   if (t.id === 'health-file' && t.files && t.files[0]) importHealthFile(t.files[0]);
   if (t.dataset.act === 'set-sound') store.setSettings({ sound: t.checked });
+  if (t.dataset.act === 'set-sandbag') { store.setEquip({ sandbag: t.checked }); render(); toast(t.checked ? 'Sandbag on — real sandbag work is back.' : 'Sandbag off — training proxies for now.'); }
   if (t.dataset.act === 'set-rest') store.setSettings({ restDefault: +t.value || 120 });
   if (t.dataset.act === 'set-max') setMaxEdit(t.dataset.id, +t.value);
   if (t.dataset.act === 'set-week') { store.setPointer({ absWeek: (+t.value || 1) - 1 }); render(); }
@@ -834,6 +893,19 @@ function setRir(bi, si, val) {
   if (st.rir != null) { const adj = engine.adjustAfterSet(st, { reps: st.reps, rir: st.rir }, U(), blk.loadType); if (adj && adj.nextWeight && blk.sets[si + 1] && blk.sets[si + 1].weight != null) blk.sets[si + 1].weight = adj.nextWeight; }
   store.patchActive(() => {});
   renderWorkout();
+}
+function doSwap(bi, exId) {
+  const a = store.get().active; if (!a) return;
+  const entry = a.entries[bi]; if (!entry) return;
+  const base = entry.baseExId || entry.exerciseId;
+  const revert = exId === base;
+  store.setExPref(base, revert ? null : exId);              // remember as the standing default (or clear on revert)
+  const block = engine.represcribeSlot(store.get(), a, entry.id, revert ? null : exId);
+  if (!block) { toast('Could not swap that one.'); return; }
+  store.patchActive((x) => { x.entries[bi] = entryFromBlock(block); });
+  rest.endAt = 0;
+  renderWorkout();
+  toast(revert ? `Back to ${getExercise(base).name}.` : `Now doing ${getExercise(exId).name} — saved as your default.`);
 }
 function moveCursor(dir) {
   const a = store.get().active; if (!a) return;
