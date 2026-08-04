@@ -77,4 +77,31 @@ realization taper. The deadlift coasts on 1–2 heavy primers/week.
 
 You bring the work and the honesty (log it like it happened). The app brings the plan and the math.
 
+## When you can't train four days
+
+Set **Settings → Your training week** to the number of days you'll really train (2, 3 or 4). The
+week then advances once you've done or skipped that many, so a two-day week moves the plan forward
+instead of stalling it. You get the block's most important sessions first; the rest sit under
+*extra credit* on the board — still there, never deleted.
+
+Home also tells you the truth about where you stand: which program week you're on versus which
+calendar week it is, and how many weeks remain to the qualifier. And if you've been off for a
+couple of weeks, loads come back trimmed for the first session back, with a note saying why.
+
+## When you just want to lift
+
+Some weeks the program isn't what you want, and a session you skip is worth nothing. On the Home
+screen, **Just Lift** builds a complete lift day on demand — pick **Leg Day / Push Day / Pull Day /
+Upper Body / Full Body** and every weight, set and rep is filled in from your current numbers.
+
+- It picks the lifts you've trained *least recently*, so two leg days in a row aren't the same leg day.
+  Tap **↻ different** if you want another roll of it.
+- Sessions of a focus rotate **Volume → Heavy → Pump**, so the same "leg day" keeps progressing
+  instead of flatlining.
+- It **does not touch the program**: free lifts log as extra sessions, your week stays exactly where
+  it was, and every rep still feeds your maxes, your charts and the load monitor.
+
+Doing these instead of the plan costs you the running and event-specific work the Games actually
+score — but it's real training, it's logged, and it keeps you in the app. Do both when you can.
+
 *The reasoning behind every choice here lives in `PROGRAM-SCIENCE.md`.*

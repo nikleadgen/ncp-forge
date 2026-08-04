@@ -3,9 +3,11 @@
 // localStorage directly. A schema change must MIGRATE existing data, never wipe it:
 // bump SCHEMA_VERSION and add a function to MIGRATIONS.
 
+import { sessionPriority } from './program.js';
+
 const KEY = 'forge_state';
-export const SCHEMA_VERSION = 5;
-export const VERSION = '0.5.0'; // shown in Settings; bump on each deploy so updates are verifiable
+export const SCHEMA_VERSION = 6;
+export const VERSION = '0.7.0'; // shown in Settings; bump on each deploy so updates are verifiable
 
 function defaultState() {
   return {
@@ -13,7 +15,9 @@ function defaultState() {
     // profile: set during onboarding. null = first run.
     profile: null, // { name, sex, age, heightIn, bodyweight, units, injuries:[], experience, hasPullupBar, sandbagMax }
     // exPrefs: your saved exercise swaps { plannedExId: chosenExId }. equipment: gear you can load.
-    settings: { units: 'lb', restDefault: 150, sound: true, autoRest: true, exPrefs: {}, equipment: { sandbag: false } },
+    // weekTarget: how many of the week's 4 sessions you realistically train. The week advances
+    // once you've done or skipped that many, so a 2-day life doesn't stall the plan forever.
+    settings: { units: 'lb', restDefault: 150, sound: true, autoRest: true, exPrefs: {}, equipment: { sandbag: false }, weekTarget: 4 },
     // maxes: the engine's working model of the athlete. Updated automatically from logs.
     maxes: {}, // see seedMaxes(): { deadlift:{e1rm,updated}, ..., pull_up:{maxReps,updated}, mile:{seconds,updated} }
     // program pointer. Training advances by completed sessions, not the calendar,
@@ -51,6 +55,8 @@ const MIGRATIONS = [
     if (!s.settings.equipment) s.settings.equipment = { sandbag: false };
     return s;
   },
+  // v5 → v6: add the realistic weekly training target (defaults to the original 4-day week)
+  (s) => { s.settings = s.settings || {}; if (!s.settings.weekTarget) s.settings.weekTarget = 4; return s; },
 ];
 
 function migrate(state) {
@@ -180,33 +186,58 @@ export function startSession(session) { update((s) => { s.active = session; }); 
 export function patchActive(mutator) { update((s) => { if (s.active) mutator(s.active); }); }
 export function clearActive() { update((s) => { s.active = null; }); }
 
+// Index every logged set into history for charts + engine. One path, so a program session
+// and a Just Lift session produce exactly the same record.
+function indexHistory(s, session) {
+  for (const entry of session.entries || []) {
+    if (!entry.exerciseId) continue;
+    const arr = (s.history[entry.exerciseId] = s.history[entry.exerciseId] || []);
+    for (const set of entry.sets || []) {
+      if (!set.done) continue;
+      arr.push({
+        dateISO: session.dateISO,
+        weight: set.weight ?? null,
+        reps: set.reps ?? null,
+        rir: set.rir ?? null,
+        rpe: set.rpe ?? null,
+        e1rm: set.e1rm ?? null,
+        bw: s.profile ? s.profile.bodyweight : null,
+      });
+    }
+  }
+}
+
 // Finalize a workout: append to permanent log, index history, advance the pointer.
 export function commitSession(session) {
   update((s) => {
     s.sessions.push(session);
     s.active = null;
-    // index every logged set into history for charts + engine
-    for (const entry of session.entries || []) {
-      if (!entry.exerciseId) continue;
-      const arr = (s.history[entry.exerciseId] = s.history[entry.exerciseId] || []);
-      for (const set of entry.sets || []) {
-        if (!set.done) continue;
-        arr.push({
-          dateISO: session.dateISO,
-          weight: set.weight ?? null,
-          reps: set.reps ?? null,
-          rpe: set.rpe ?? null,
-          e1rm: set.e1rm ?? null,
-          bw: s.profile ? s.profile.bodyweight : null,
-        });
-      }
-    }
+    indexHistory(s, session);
     advanceIfComplete(s);
   });
 }
 
-// A week advances once all 4 sessions are RESOLVED (done or skipped) — never by the calendar.
-// So a missed session is never lost: you just do the next one, even a week later.
+// Extra sessions — Just Lift days and optional days. Logged, charted and learned from
+// exactly like a program session, but they never advance the program pointer, so the
+// 52-week plan stays right where you left it.
+export function logExtraSession(session, maxesPatch) {
+  update((s) => {
+    s.sessions.push(session);
+    s.active = null;
+    if (maxesPatch) Object.assign(s.maxes, maxesPatch);
+    indexHistory(s, session);
+  });
+}
+
+// How many of the week's 4 sessions count as a complete week for you (2–4).
+export function weekTarget(state) {
+  const s = state || get();
+  return Math.max(1, Math.min(4, (s.settings && s.settings.weekTarget) || 4));
+}
+
+// A week advances once your TARGET number of sessions are RESOLVED (done or skipped) — never by
+// the calendar. Set the target to your real life (say 2/week) and the plan tracks you instead of
+// stalling; the sessions beyond it stay available as extras, and none of it is ever lost.
 function advanceIfComplete(s) {
   const W = s.program.absWeek;
   s.program.skipped = s.program.skipped || {};
@@ -214,8 +245,10 @@ function advanceIfComplete(s) {
   for (const x of s.sessions) if (x.absWeek === W && !x.optional && typeof x.sessionInWeek === 'number') done[x.sessionInWeek] = true;
   let resolved = 0;
   for (let i = 0; i < 4; i++) if (done[i] || s.program.skipped[`${W}:${i}`]) resolved++;
-  if (resolved >= 4 && W < 51) { s.program.absWeek = W + 1; s.program.sessionInWeek = 0; }
+  if (resolved >= weekTarget(s) && W < 51) { s.program.absWeek = W + 1; s.program.sessionInWeek = 0; }
 }
+// Re-check after the target changes (lowering it may already complete the current week).
+export function reconcileWeek() { update((s) => { advanceIfComplete(s); }); }
 
 // Resolution status of a week (derived from the session log + skip map).
 export function weekResolution(absWeek) {
@@ -230,9 +263,11 @@ export function weekResolution(absWeek) {
   for (const k of Object.keys((s.program.skipped) || {})) { const p = k.split(':'); if (+p[0] === absWeek) skipped[+p[1]] = s.program.skipped[k]; }
   return { done, doneDate, doneRPE, skipped };
 }
+// "Up next" follows the block's priority order, so the work that block exists to build is
+// always what you're pointed at first.
 export function suggestedIndex(absWeek) {
   const { done, skipped } = weekResolution(absWeek);
-  for (let i = 0; i < 4; i++) if (!done[i] && !skipped[i]) return i;
+  for (const i of sessionPriority(absWeek)) if (!done[i] && !skipped[i]) return i;
   return 0;
 }
 export function skipSession(index) { update((s) => { s.program.skipped = s.program.skipped || {}; s.program.skipped[`${s.program.absWeek}:${index}`] = new Date().toISOString(); advanceIfComplete(s); }); }

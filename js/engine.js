@@ -10,7 +10,7 @@
 // All numbers trace to docs/PROGRAM-SCIENCE.md.
 
 import { getExercise, EXERCISES } from './exercises.js';
-import { planContext, getSession, getDay, COMMON_DAYS, dateForWeek, MACRO } from './program.js';
+import { planContext, getSession, getDay, COMMON_DAYS, dateForWeek, MACRO, LIFT_FLAVORS, liftFocus } from './program.js';
 
 // ---------- equipment routing (proxy lifts you can't yet load) ----------
 // The only odd-object work in the plan is sandbag-based. Until a loaded sandbag is
@@ -67,6 +67,37 @@ export function roundLoad(load, type, units = 'lb') {
   return r;
 }
 
+// ---------- plate math ----------
+// What to actually hang on the bar, so nobody does arithmetic mid-set. Greedy from the heaviest
+// plate down, per side. Bars differ (an EZ bar isn't 45), so each is named in exercises.js.
+const BARS = { standard: { lb: 45, kg: 20 }, ez: { lb: 25, kg: 11 }, trap: { lb: 60, kg: 27 } };
+const PLATES = { lb: [45, 35, 25, 15, 10, 5, 2.5, 1.25], kg: [25, 20, 15, 10, 5, 2.5, 1.25] };
+const num = (n) => (Math.round(n * 100) / 100).toString();
+
+export function barWeight(exId, units = 'lb') {
+  const ex = getExercise(exId);
+  if (ex.load !== 'barbell') return null;
+  return (BARS[ex.bar] || BARS.standard)[units === 'kg' ? 'kg' : 'lb'];
+}
+
+// → { bar, perSide:[{plate,count}], exact, short } or null when plates don't apply.
+export function plateMath(total, exId, units = 'lb') {
+  const bar = barWeight(exId, units);
+  if (bar == null || total == null || total <= 0) return null;
+  const standard = bar === BARS.standard[units === 'kg' ? 'kg' : 'lb'];
+  if (total <= bar) return { bar, standard, perSide: [], exact: total === bar, short: 'just the bar' };
+  let side = (total - bar) / 2;
+  const out = [];
+  for (const p of PLATES[units === 'kg' ? 'kg' : 'lb']) {
+    const n = Math.floor((side + 1e-9) / p);
+    if (n > 0) { out.push({ plate: p, count: n }); side -= n * p; }
+  }
+  const exact = side < 1e-6;
+  return { bar, standard, perSide: out, exact,
+    short: out.map((o) => (o.count > 1 ? o.count + '×' : '') + num(o.plate)).join(' · ')
+      + (exact ? '' : ` (+${num(side * 2)} short)`) };
+}
+
 // Conservative default e1RM as a multiple of bodyweight (per hand for DB lifts). Seeds the very
 // first prescriptions; real logs overwrite these within a couple of sessions.
 const E1RM_MULT = {
@@ -93,7 +124,14 @@ function currentE1RM(state, exId, profile) {
 }
 function currentMaxReps(state, exId) {
   const rec = state.maxes && state.maxes[exId];
-  return (rec && rec.maxReps) ? rec.maxReps : (DEFAULT_REPS_MAX[exId] || 10);
+  if (rec && rec.maxReps) return rec.maxReps;
+  // Never measured this one — borrow from the nearest lift you HAVE measured before falling
+  // back to a table default (9 pull-ups shouldn't prescribe 3 chin-ups).
+  for (const sid of (getExercise(exId).sub || [])) {
+    const r = state.maxes && state.maxes[sid];
+    if (r && r.maxReps) return r.maxReps;
+  }
+  return DEFAULT_REPS_MAX[exId] || 10;
 }
 function mileSeconds(state) {
   const rec = state.maxes && state.maxes.mile;
@@ -195,8 +233,11 @@ export function computeACWR(state) {
   const established = historyDays >= 21 && sessions.length >= 6;
   const ratio = (established && chronicWeekly > 0) ? acute / chronicWeekly : null;
   let status = 'building', color = '#8a94a6', advice = 'Building your baseline — keep progressing steadily.';
+  const off = layoffScale(state);
   if (ratio != null) {
-    if (ratio < 0.8) { status = 'detraining-risk'; color = '#60a5fa'; advice = 'Load is dipping below your baseline — you can push a little more.'; }
+    // A layoff also reads as "low load" — but the answer there is ease back in, not push harder.
+    if (ratio < 0.8 && off.days >= 14) { status = 'returning'; color = '#fbbf24'; advice = `${off.days} days since your last session — ease back in for a session or two before pushing.`; }
+    else if (ratio < 0.8) { status = 'detraining-risk'; color = '#60a5fa'; advice = 'Load is dipping below your baseline — you can push a little more.'; }
     else if (ratio <= 1.3) { status = 'optimal'; color = '#36d399'; advice = 'Sweet spot — fitness rising, injury risk low.'; }
     else if (ratio <= 1.5) { status = 'caution'; color = '#fbbf24'; advice = 'Ramping fast — hold volume steady this week.'; }
     else { status = 'high-risk'; color = '#f87171'; advice = 'Spiking — back off. Extra easy day or a deload is wise.'; }
@@ -240,14 +281,111 @@ const AREA_LABELS = { knee: 'knee', back: 'lower back', shoulder: 'shoulder', el
 export function areaLabel(a) { return AREA_LABELS[a] || a; }
 export function excludedAreas(state) { return new Set(((state.tweaks) || []).map((t) => t.area)); }
 
+// ================= JUST LIFT — build a lift day on demand =================
+// Free lifts run OUTSIDE the program's weekly wave (a program deload shouldn't shrink a day
+// you chose to do), but every other loop still applies: readiness, ACWR, niggles, swaps,
+// equipment routing, and the working maxes.
+const FREE_WAVE = { label: 'Just Lift', rirDelta: 0, volMult: 1, intMult: 1 };
+
+function lastTrainedTs(state, exId) {
+  const h = (state.history && state.history[exId]) || [];
+  let t = 0;
+  for (const x of h) { const v = new Date(x.dateISO).getTime(); if (v > t) t = v; }
+  return t;
+}
+
+// Gear the athlete doesn't have rules a lift out of the pool entirely.
+function gearOk(state, exId, profile) {
+  const NEEDS_BAR = new Set(['pull_up', 'chin_up', 'band_pull_up', 'negative_pull_up', 'dead_hang', 'hanging_leg_raise']);
+  if (profile && profile.hasPullupBar === false && NEEDS_BAR.has(exId)) return false;
+  return true;
+}
+
+// Days since the last logged session — a long layoff means the stored maxes are optimistic.
+export function layoffScale(state) {
+  const sessions = state.sessions || [];
+  if (!sessions.length) return { days: null, mult: 1, note: '' };
+  let last = 0;
+  for (const s of sessions) { const t = new Date(s.dateISO).getTime(); if (t > last) last = t; }
+  const days = Math.floor((Date.now() - last) / 86400000);
+  if (days >= 28) return { days, mult: 0.85, note: `First one back after ${days} days — loads trimmed ~15%. Earn it back over two or three sessions.` };
+  if (days >= 14) return { days, mult: 0.92, note: `${days} days since your last session — eased the loads a touch to knock the rust off.` };
+  return { days, mult: 1, note: '' };
+}
+
+// Where the plan sits vs where the calendar sits. The program advances by completed sessions, so
+// missing days never loses a workout — but it does push everything later, and the Games date doesn't
+// move. This is the honest reconciliation of the two.
+export function scheduleStatus(state) {
+  const start = state.program && state.program.startDateISO;
+  if (!start) return null;
+  const programWeek = (state.program && state.program.absWeek) || 0;
+  const calendarWeek = Math.floor((Date.now() - new Date(start).getTime()) / (7 * 86400000));
+  const since = Date.now() - 28 * 86400000;
+  const recent = (state.sessions || []).filter((s) => new Date(s.dateISO).getTime() >= since);
+  return {
+    programWeek, calendarWeek,
+    weeksBehind: Math.max(0, calendarWeek - programWeek),
+    sessionsLast28: recent.length,
+    perWeek: Math.round((recent.length / 4) * 10) / 10,
+    weeksToQualifier: MACRO.qualifierWeek - calendarWeek,
+    weeksToFinals: MACRO.finalsWeek - calendarWeek,
+  };
+}
+
+export function freeLiftCount(state, focusId) {
+  return (state.sessions || []).filter((s) => s.free && (!focusId || s.free === focusId)).length;
+}
+
+// Scheme for one slot: the flavor sets the numbers, the exercise's own unit sets the type.
+function schemeFor(exId, role, flavor) {
+  const ex = getExercise(exId);
+  const r = flavor.roles[role] || flavor.roles.accessory;
+  if (ex.unit === 'time') return { t: 'hold', sets: 3, seconds: flavor.holdSecs, rest: 45 };
+  if (ex.unit === 'dist') return { t: 'carry', sets: 3, dist: 40, rest: r.rest, loadPct: 0.6 };
+  if (ex.unit === 'bw') return { t: 'bwreps', sets: r.sets, reps: 'sub', pctMax: flavor.bwPct, rest: r.rest };
+  return { t: 'strength', sets: r.sets, reps: r.reps, rir: r.rir, rest: r.rest, prog: 'load' };
+}
+
+// Build a complete lift day. `variant` is the re-roll counter — same inputs, same session,
+// so what you previewed is exactly what you start.
+export function buildLiftDay(state, focusId, variant = 0) {
+  const focus = liftFocus(focusId);
+  const profile = state.profile || {};
+  const excluded = excludedAreas(state);
+  const flavor = LIFT_FLAVORS[freeLiftCount(state, focus.id) % LIFT_FLAVORS.length];
+  const used = new Set();
+  const slots = [];
+  for (const r of focus.roles) {
+    let pool = r.pool.filter((id) => EXERCISES[id] && !used.has(id) && gearOk(state, id, profile));
+    // prefer lifts that don't load a flagged niggle, but never leave the role empty
+    const clean = pool.filter((id) => !intersects(areasFor(id), excluded));
+    if (clean.length) pool = clean;
+    if (!pool.length) continue;
+    // least-recently-trained first — variety with no decision to make
+    const ranked = pool.slice().sort((a, b) => lastTrainedTs(state, a) - lastTrainedTs(state, b) || a.localeCompare(b));
+    const exId = ranked[variant % ranked.length];
+    used.add(exId);
+    slots.push({ id: r.id, ex: exId, scheme: schemeFor(exId, r.role, flavor) });
+  }
+  const layoff = layoffScale(state);
+  return { focus, flavor, layoff, day: { name: `${focus.name} · ${flavor.label}`, tag: 'strength', free: focus.id, slots } };
+}
+
 // ================= resolve a session into concrete prescriptions =================
 export function resolveSessionAt(state, absWeek, sessionInWeek, opts = {}) {
   const profile = state.profile;
   const units = (state.settings && state.settings.units) || 'lb';
-  const { ctx, day, dayKey } = opts.optionalDayKey
-    ? { ctx: planContext(absWeek), day: COMMON_DAYS[opts.optionalDayKey], dayKey: opts.optionalDayKey }
-    : getSession(absWeek, sessionInWeek);
-  const wave = ctx.wave;
+  const { ctx, day, dayKey } = opts.customDay
+    ? { ctx: planContext(absWeek), day: opts.customDay, dayKey: 'free:' + (opts.customDay.free || 'lift') }
+    : opts.optionalDayKey
+      ? { ctx: planContext(absWeek), day: COMMON_DAYS[opts.optionalDayKey], dayKey: opts.optionalDayKey }
+      : getSession(absWeek, sessionInWeek);
+  const free = !!opts.customDay;
+  // Time off applies to BOTH modes: the stored maxes describe the athlete you were.
+  const layoff = layoffScale(state);
+  const wave = free ? { ...FREE_WAVE, intMult: layoff.mult }
+    : { ...ctx.wave, intMult: ctx.wave.intMult * layoff.mult };
   const rs = combinedReadiness(state); // subjective check + today's HRV/sleep if present
   const acwr = computeACWR(state);
   const damp = acwrDamp(acwr);
@@ -262,10 +400,11 @@ export function resolveSessionAt(state, absWeek, sessionInWeek, opts = {}) {
 
   return {
     absWeek, sessionInWeek, dayKey,
-    dayName: day.name, dayTag: day.tag, optional: !!day.optional,
-    isTest: ctx.isTestWeek && !opts.optionalDayKey,
+    dayName: day.name, dayTag: day.tag, optional: free || !!day.optional,
+    isTest: ctx.isTestWeek && !opts.optionalDayKey && !free,
+    free: free ? day.free : null, layoffNote: layoff.note,
     ctx, readiness: rs, acwr, blocks,
-    layoutNote: ctx.phase.layoutNote,
+    layoutNote: free ? '' : ctx.phase.layoutNote,
   };
 }
 
@@ -275,14 +414,19 @@ export function represcribeSlot(state, active, slotId, forcedExId) {
   const profile = state.profile;
   const units = (state.settings && state.settings.units) || 'lb';
   const ctx = planContext(active.absWeek);
-  const day = active.optionalDayKey ? COMMON_DAYS[active.optionalDayKey] : getSession(active.absWeek, active.sessionInWeek).day;
+  // a free lift carries its own slots on the active session (it isn't in the 52-week plan)
+  const day = active.freeSlots ? { slots: active.freeSlots }
+    : active.optionalDayKey ? COMMON_DAYS[active.optionalDayKey]
+      : getSession(active.absWeek, active.sessionInWeek).day;
   let slot = (day.slots || []).find((sl) => sl.id === slotId);
   if (!slot && slotId === 'wu') slot = COMMON_DAYS.warmup.slots[0];
   if (!slot) return null;
   const rs = combinedReadiness(state);
   const acwr = computeACWR(state);
   const excluded = excludedAreas(state);
-  return resolveSlot(slot, { state, profile, units, wave: ctx.wave, rs, damp: acwrDamp(acwr), ctx, excluded, forcedEx: forcedExId || null });
+  const lay = layoffScale(state).mult;
+  const wave = active.freeSlots ? { ...FREE_WAVE, intMult: lay } : { ...ctx.wave, intMult: ctx.wave.intMult * lay };
+  return resolveSlot(slot, { state, profile, units, wave, rs, damp: acwrDamp(acwr), ctx, excluded, forcedEx: forcedExId || null });
 }
 
 function setsCount(base, volMult) { return Math.max(1, Math.min(base + 1, Math.round(base * volMult))); }
@@ -508,11 +652,13 @@ function seriesByDay(history, pick) {
 }
 export function progressSeries(state) {
   const H = state.history || {};
-  const e1 = (id) => seriesByDay(H[id], (h) => h.e1rm || (h.weight && h.reps ? Math.round(e1rmFromSet(h.weight, h.reps, h.rpe != null ? 10 - h.rpe : 1)) : null));
+  const rirOf = (h) => (h.rir != null ? h.rir : (h.rpe != null ? Math.max(0, 10 - h.rpe) : 1));
+  const e1 = (id) => seriesByDay(H[id], (h) => h.e1rm || (h.weight && h.reps ? Math.round(e1rmFromSet(h.weight, h.reps, rirOf(h))) : null));
   return {
     deadlift: e1('deadlift'),
     back_squat: e1('back_squat'),
     overhead_press: e1('overhead_press'),
+    bench_press: e1('bench_press'),
     pull_up: seriesByDay(H.pull_up, (h) => h.reps),
     push_up: seriesByDay(H.hand_release_push_up, (h) => h.reps).concat(seriesByDay(H.push_up, (h) => h.reps)).sort((a, b) => a.x < b.x ? -1 : 1),
     bodyweight: seriesByDay(state.body, (h) => h.weight),

@@ -15,7 +15,7 @@ export const EXERCISES = {
   deadlift: { name: 'Deadlift', load: 'barbell', unit: 'weight', pattern: 'hinge',
     cues: ['Bar over midfoot', 'Wedge — chest up, lats tight', 'Push the floor away'],
     sub: ['trap_bar_deadlift', 'romanian_deadlift'], demo: 'conventional deadlift setup tutorial' },
-  trap_bar_deadlift: { name: 'Trap-Bar Deadlift', load: 'barbell', unit: 'weight', pattern: 'hinge',
+  trap_bar_deadlift: { name: 'Trap-Bar Deadlift', load: 'barbell', unit: 'weight', pattern: 'hinge', bar: 'trap',
     cues: ['Stand tall fast', 'Hips and knees finish together'], sub: ['deadlift'], demo: 'trap bar deadlift' },
   romanian_deadlift: { name: 'Romanian Deadlift', load: 'barbell', unit: 'weight', pattern: 'hinge',
     cues: ['Soft knees', 'Hips back, bar drags the thighs', 'Feel the hamstrings'], sub: ['db_rdl'], demo: 'romanian deadlift form' },
@@ -137,7 +137,7 @@ export const EXERCISES = {
     cues: ['One DB, stay level', 'No lean', 'Brace the obliques'], sub: ['farmer_carry'], demo: 'suitcase carry' },
 
   // ---------- Arms / accessories ----------
-  ez_curl: { name: 'EZ-Bar Curl', load: 'barbell', unit: 'weight', pattern: 'arms',
+  ez_curl: { name: 'EZ-Bar Curl', load: 'barbell', unit: 'weight', pattern: 'arms', bar: 'ez',
     cues: ['Elbows pinned', 'No swing', 'Squeeze top'], sub: ['db_curl'], demo: 'ez bar curl' },
   db_curl: { name: 'DB Curl', load: 'dumbbell', unit: 'weight', pattern: 'arms',
     cues: ['Supinate', 'Slow eccentric', 'No momentum'], sub: ['ez_curl'], demo: 'dumbbell curl' },

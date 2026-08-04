@@ -204,12 +204,76 @@ The basics beat the details — totals and sleep first, timing second
 
 ---
 
-## 8. How this maps into the app
+## 8. "Just Lift" — the on-demand lift day
+
+The 52-week plan is the road to the podium, but a plan you don't run is worth nothing. **Just Lift**
+is the second door in: pick a focus (legs / push / pull / upper / full body) and the engine builds a
+complete session on the spot. It exists because *consistency beats optimality* — the training you
+actually do outperforms the perfect program you skip, and every free lift still feeds the same
+working maxes, the same charts and the same weekly-load monitor as a program session.
+
+How each choice is made:
+
+- **Exercise selection — least-recently-trained wins.** Each role in a focus (main lift, second lift,
+  accessory, arms, core) carries a pool; the engine picks whichever lift you've gone longest without.
+  That produces variety and rough per-pattern balance with zero decisions from you, and stops the
+  same three lifts from monopolizing the rotation.
+- **Rep schemes — daily-undulating.** Sessions of a given focus rotate **Volume → Heavy → Pump**
+  (~8s at RIR 2 → 3–5s at RIR 2 → 12–15s at RIR 1). That's the same undulating structure the later
+  program blocks use, which carries a modest 1RM advantage at matched volume (§3), and it spans the
+  load spectrum: hypertrophy is driven by hard sets across a wide rep range, while heavy work is
+  what actually moves the top end.
+- **3–5 hard sets per movement, 4–5 movements** — lands each session in the productive weekly-set
+  band per muscle group without wrecking recovery for the program days that matter.
+- **Loads come from the same model.** Reps-RIR → %1RM off your measured e1RM (§4). Nothing is
+  hardcoded; as your logs move your maxes, free lifts get heavier automatically.
+- **Re-entry damping.** If it's been ≥14 days since your last logged session the loads are trimmed
+  ~8%, and ≥28 days ~15%. Stored maxes describe the athlete you were, not the one who's been off for
+  a month, and the returning-athlete window is exactly where §5's tendon/bone risk lives. Two or
+  three sessions of logs pull the numbers back up on their own.
+- **Everything else still applies:** the readiness check scales load and volume, ACWR brakes a spike,
+  flagged niggles route to safe substitutions (and are avoided at pool-selection time when a clean
+  option exists), and equipment routing/swaps work as they do in the program.
+
+What it deliberately does **not** do: touch the program. Free lifts log as extra sessions — they
+never advance the week pointer, so the 52-week plan is exactly where you left it.
+
+---
+
+## 9. Training the week you actually have
+
+A plan that demands four sessions from someone who trains twice doesn't produce four sessions — it
+produces a stalled program and a scoreboard of failure. Forge handles this in three places:
+
+**Your weekly target (2–4).** The week advances once you've done or skipped *your* number, not
+four. Set it to what you really train and the program tracks your life instead of sliding further
+behind every week. Nothing is deleted: the sessions past your target stay on the board as extra
+credit, and skipped work is still recorded.
+
+**Priority order per block.** With a target under four you get the sessions that block exists to
+build, in order — deadlift day leads Max Strength, aerobic volume leads the Aerobic block (but one
+lift stays in, because strength holds on 1–2 sessions/week, §2), the two qualifier events lead a
+test week. The maintenance work is what falls off, which is exactly the right thing to drop
+(§2: maintenance is cheap; the priority quality is not).
+
+**The drift readout.** The program advances by completed sessions, so missing days never loses a
+workout — but it does push everything later, and the competition date doesn't move. Home shows the
+gap plainly (program week vs calendar week, weeks to the qualifier) rather than hiding it behind a
+week counter that only counts training. Matching your target to your real frequency is what stops
+the gap growing.
+
+**Loads after time off.** The re-entry damping in §8 applies to program sessions too, not just
+Just Lift: ≥14 days off trims ~8%, ≥28 days ~15%, and the ACWR advice switches from "you can push
+more" (which is what a low acute:chronic ratio looks like after a layoff) to "ease back in."
+
+---
+
+## 10. How this maps into the app
 
 - `js/program.js` — the 7 blocks above, as data: per-block day templates, 4-week (or block-length)
-  waves, deloads, and benchmark test weeks.
+  waves, deloads, and benchmark test weeks. Also the Just Lift focus templates + flavor tables (§8).
 - `js/engine.js` — the autoregulation math from §4: reps-RIR → %1RM loads, equipment rounding,
-  readiness scaling, ACWR, set-to-set nudges, and max updates from your logs.
+  readiness scaling, ACWR, set-to-set nudges, max updates from your logs, and the Just Lift builder.
 - `js/exercises.js` — movement selection constrained to your home gym, with substitutions and cues.
 
 Read `PROGRAM-OVERVIEW.md` for the month-by-month plan in plain language.

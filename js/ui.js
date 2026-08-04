@@ -12,6 +12,7 @@ let onbStep = 0;
 const onb = {};            // onboarding scratch
 let rest = { id: null, endAt: 0, dur: 0 };
 const previewOpen = new Set(); // week-board session indices whose exercise preview is expanded
+let freePick = null;           // Just Lift: { focus, variant } — the day being previewed on Home
 
 const U = () => (store.get().settings.units || 'lb');
 const esc = (s) => String(s == null ? '' : s).replace(/[<>&"]/g, (m) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[m]));
@@ -158,7 +159,7 @@ function renderToday() {
   const todayB = store.todayBody();
   const day = sess.day;
   const acwr = engine.computeACWR(s);
-  const dateStr = fmtDate(program.dateForWeek(s.program.startDateISO, s.program.absWeek));
+  const dateStr = fmtDate(new Date());
   const tweaks = store.activeTweaks();
 
   const readinessCard = rd ? `
@@ -183,7 +184,10 @@ function renderToday() {
         <span class="muted small right">Wk ${s.program.absWeek + 1} of 52</span></div>
 
       ${tweaks.length ? `<div class="tweak-banner">⚠ Training around your ${tweaks.map((t) => esc(engine.areaLabel(t.area))).join(', ')}. <a href="#/settings">manage</a></div>` : ''}
+      ${layoffBannerHtml(s)}
       ${readinessCard}
+      ${resumeBarHtml(s)}
+      ${justLiftHtml(s)}
       ${weekBoardHtml(s)}
       ${calendarHtml(s)}
 
@@ -196,6 +200,68 @@ function renderToday() {
     </main>`;
 }
 
+// Coming back after time off: say so up front, since it's why today's loads look lighter.
+function layoffBannerHtml(s) {
+  const off = engine.layoffScale(s);
+  if (!off.note) return '';
+  return `<div class="layoff-banner">🔁 ${esc(off.note)}</div>`;
+}
+
+// Where the plan sits vs the calendar. Missing days costs you nothing on the board — the queue
+// waits — but it does move everything later, and the Games date doesn't wait. Say both plainly.
+function driftHtml(s) {
+  const st = engine.scheduleStatus(s);
+  if (!st || st.weeksBehind < 1) return '';
+  const wk = (n) => `${n} week${n === 1 ? '' : 's'}`;
+  const target = store.weekTarget(s);
+  // If the target already matches what he actually trains, the drift stops growing — say so
+  // instead of nagging. Otherwise point at the one setting that fixes it.
+  const suggest = Math.max(2, Math.round(st.perWeek || 0));
+  const fix = (st.sessionsLast28 && suggest < target)
+    ? ` You've averaged ${st.perWeek} sessions/week — set your week to ${suggest} in <a href="#/settings">Settings</a> and the plan stops sliding.`
+    : ` Your week is set to ${target} — hitting that number is what stops the slide.`;
+  return `<div class="drift">
+    <div><b>You're ${wk(st.weeksBehind)} behind the calendar.</b> Program week ${st.programWeek + 1}, calendar week ${st.calendarWeek + 1}.</div>
+    <div class="muted small">Nothing is lost — no session disappears. But the Games don't wait: about
+      ${wk(Math.max(0, st.weeksToQualifier))} to the qualifier.${fix}</div>
+  </div>`;
+}
+
+// A paused Just Lift / optional session has no row on the week board — give it a way back.
+function resumeBarHtml(s) {
+  const a = s.active;
+  if (!a || (!a.free && !a.optional)) return '';
+  return `<button class="card resume-bar" data-act="goto" data-href="#/workout">
+    <span class="resume-name">▶ Resume ${esc(a.dayName)}</span><span class="muted small">in progress</span></button>`;
+}
+
+// "Just lift" — pick a focus, get a whole session built from your numbers. Extra credit:
+// it's logged and charted like any other session but never moves the 52-week pointer.
+function justLiftHtml(s) {
+  const chips = program.LIFT_FOCUS.map((f) => `<button class="focus-chip ${freePick && freePick.focus === f.id ? 'sel' : ''}" data-act="free-pick" data-focus="${f.id}">${esc(f.name)}</button>`).join('');
+  let panel = '';
+  if (freePick) {
+    const built = engine.buildLiftDay(s, freePick.focus, freePick.variant);
+    const res = engine.resolveSessionAt(s, s.program.absWeek, 0, { customDay: built.day });
+    const rows = res.blocks.filter((b) => b.id !== 'wu').map((b) =>
+      `<div class="pv-row"><span class="pv-name">${esc(b.name)}</span><span class="muted small">${esc(String(b.prescription).split('·')[0].trim())}</span></div>`).join('');
+    panel = `<div class="free-panel">
+      <div class="row between"><div class="free-title">${esc(res.dayName)}</div><button class="link-inline" data-act="free-reroll">↻ different</button></div>
+      <div class="muted small free-why">${esc(built.flavor.why)}</div>
+      ${rows}
+      ${res.layoffNote ? `<div class="hint">${esc(res.layoffNote)}</div>` : ''}
+      ${s.active ? '<div class="muted small free-busy">Finish or pause your current session first.</div>'
+        : `<button class="btn-primary free-go" data-act="free-start">Start ${esc(built.focus.name)} →</button>`}
+    </div>`;
+  }
+  return `<div class="card justlift">
+    <div class="row between"><div class="lbl">Just lift</div><div class="muted small">extra · doesn't touch the plan</div></div>
+    <div class="muted small wb-sub">Just want to lift? Pick a focus — Forge builds the whole session from your numbers, today's readiness and what you've trained lately.</div>
+    <div class="focus-row">${chips}</div>
+    ${panel}
+  </div>`;
+}
+
 // "This week" board — the 4 core sessions with status + a Start on the next one, plus optional days.
 function weekBoardHtml(s) {
   const aw = s.program.absWeek;
@@ -204,19 +270,24 @@ function weekBoardHtml(s) {
   const suggested = store.suggestedIndex(aw);
   const activeIdx = (s.active && !s.active.optional) ? s.active.sessionInWeek : null;
   const doneCount = Object.keys(res.done).length;
-  let rows = '';
-  for (let i = 0; i < 4; i++) {
+  const target = store.weekTarget(s);
+  const order = program.sessionPriority(aw);        // block priority: what matters most first
+  const core = order.slice(0, target);
+  const extra = order.slice(target);
+  // `pos` is where the row sits on the board (priority order), which is what gets numbered —
+  // the underlying session index would read as scrambled once the block reorders them.
+  const row = (i, pos) => {
     const sess = program.getSession(aw, i);
     const isDone = !!res.done[i], isSkip = !!res.skipped[i];
     const status = isDone ? 'done' : (isSkip ? 'skipped' : (i === suggested ? 'next' : 'upcoming'));
-    const icon = isDone ? '✓' : (isSkip ? '–' : (i === suggested ? '▶' : i + 1));
+    const icon = isDone ? '✓' : (isSkip ? '–' : (i === suggested ? '▶' : pos + 1));
     let meta;
     if (isDone) meta = `${esc(fmtDate(res.doneDate[i]))} · RPE ${res.doneRPE[i] || '—'}`;
     else if (isSkip) meta = `skipped · <button class="link-inline" data-act="unskip" data-idx="${i}">undo</button>`;
     else meta = `${i === suggested ? 'up next' : 'queued'} · <button class="link-inline" data-act="skip" data-idx="${i}">skip</button>`;
     const canStart = !isDone && !isSkip && (!s.active || activeIdx === i);
     const startBtn = canStart ? `<button class="wk-start ${i === suggested ? 'btn-primary' : 'btn-ghost'}" data-act="start" data-idx="${i}">${activeIdx === i ? 'Resume' : 'Start'}</button>` : '';
-    rows += `<div class="wk-row ${status}">
+    return `<div class="wk-row ${status}">
       <div class="wk-ic">${icon}</div>
       <div class="wk-mid">
         <button class="wk-peek" data-act="toggle-preview" data-idx="${i}"><span class="wk-name">${esc(sess.day.name)} <span class="peek-chev" style="${previewOpen.has(i) ? 'transform:rotate(180deg)' : ''}">▾</span></span></button>
@@ -225,15 +296,21 @@ function weekBoardHtml(s) {
       ${startBtn}
     </div>
     <div class="wk-preview ${previewOpen.has(i) ? 'open' : ''}" id="prev-${i}">${sessionPreviewList(aw, i)}</div>`;
-  }
+  };
+  const rows = core.map((i, k) => row(i, k)).join('');
+  const extraRows = extra.map((i, k) => row(i, core.length + k)).join('');
   const opt = program.optionalDays().map((k) => {
     const d = program.COMMON_DAYS[k];
     return `<button class="opt-row" data-act="start" data-optional="${k}"><span>＋ ${esc(d.name)}</span><span class="muted small">${esc(optPreview(k))}</span></button>`;
   }).join('');
+  const over = Math.max(0, doneCount - target);
   return `<div class="card weekboard">
-    <div class="row between"><div class="lbl">Week ${aw + 1} · ${esc(ctx.phase.short)}</div><div class="muted small">${doneCount}/4 done</div></div>
-    <div class="muted small wb-sub">Do these in any order. Skip what you can't get to — the week only moves on once all four are done or skipped, so you never lose a lift.</div>
+    <div class="row between"><div class="lbl">Week ${aw + 1} · ${esc(ctx.phase.short)}</div>
+      <div class="muted small">${Math.min(doneCount, target)}/${target} done${over ? ` · +${over} extra` : ''}</div></div>
+    <div class="muted small wb-sub">Your week is <b>${target} session${target === 1 ? '' : 's'}</b>${target < 4 ? ' — the ones this block needs most, in order' : ''}. Do them in any order; skip what you can't get to. The week moves on once ${target} are done or skipped, so you never lose a lift. <a href="#/settings">change</a></div>
+    ${driftHtml(s)}
     ${rows}
+    ${extraRows ? `<div class="opt-head muted small">Also in this block — extra credit</div>${extraRows}` : ''}
     ${ctx.phase.layoutNote ? `<div class="hint">💡 ${esc(ctx.phase.layoutNote)}</div>` : ''}
     <div class="opt-head muted small">Optional — only if you've got the gas</div>
     ${opt}
@@ -359,16 +436,29 @@ function entryFromBlock(b) {
     resultSeconds: null, resultRounds: null, topWeight: null, result: '',
   };
 }
-function buildActive(s, optionalDayKey, index) {
-  const idx = optionalDayKey ? 0 : (index != null ? index : store.suggestedIndex(s.program.absWeek));
+function buildActive(s, optionalDayKey, index, free) {
+  const aw = s.program.absWeek;
   const rd = store.todayReadiness();
-  const res = engine.resolveSessionAt(s, s.program.absWeek, idx, { readiness: rd, optionalDayKey: optionalDayKey || null });
-  const entries = res.blocks.map(entryFromBlock);
+  // Just Lift: the generated day travels WITH the active session (it isn't in the plan),
+  // so a mid-workout swap or a refresh can still find its slots.
+  if (free) {
+    const built = engine.buildLiftDay(s, free.focus, free.variant);
+    const res = engine.resolveSessionAt(s, aw, 0, { readiness: rd, customDay: built.day });
+    return {
+      startedAt: new Date().toISOString(), dateISO: new Date().toISOString(),
+      absWeek: aw, sessionInWeek: null, dayKey: res.dayKey, dayName: res.dayName,
+      dayTag: res.dayTag, isTest: false, optional: true, optionalDayKey: null,
+      free: built.focus.id, freeSlots: built.day.slots,
+      readinessBand: res.readiness.band, cursor: 0, entries: res.blocks.map(entryFromBlock),
+    };
+  }
+  const idx = optionalDayKey ? 0 : (index != null ? index : store.suggestedIndex(aw));
+  const res = engine.resolveSessionAt(s, aw, idx, { readiness: rd, optionalDayKey: optionalDayKey || null });
   return {
     startedAt: new Date().toISOString(), dateISO: new Date().toISOString(),
     absWeek: res.absWeek, sessionInWeek: res.sessionInWeek, dayKey: res.dayKey, dayName: res.dayName,
     dayTag: res.dayTag, isTest: res.isTest, optional: !!optionalDayKey, optionalDayKey: optionalDayKey || null,
-    readinessBand: res.readiness.band, cursor: 0, entries,
+    free: null, readinessBand: res.readiness.band, cursor: 0, entries: res.blocks.map(entryFromBlock),
   };
 }
 
@@ -384,7 +474,7 @@ function renderWorkout() {
   root.innerHTML = `
     <header class="wk-top">
       <button class="icon-btn" data-act="pause">‹</button>
-      <div class="wk-title">${esc(a.dayName)}${a.optional ? ' · bonus' : ''}</div>
+      <div class="wk-title">${esc(a.dayName)}${a.optional && !a.free ? ' · bonus' : ''}</div>
       <button class="icon-btn" data-act="finish-confirm">✓</button>
     </header>
     <div class="wk-dots">${dots}</div>
@@ -454,9 +544,11 @@ function swappable(b) {
 function swapControl(b, bi) {
   if (!swappable(b)) return '';
   const opts = swapOptions(b);
+  const free = !!(store.get().active && store.get().active.free);
+  const tag = free ? ' · today’s pick' : ' · plan default';
   return `<details class="swapbox"><summary class="swap-sum">⇄ Swap exercise</summary>
-    <div class="swap-list">${opts.map((o) => `<button class="swap-opt ${o.isDefault ? 'is-default' : ''}" data-act="do-swap" data-bi="${bi}" data-ex="${o.id}">${esc(o.name)}${o.isDefault ? ' · plan default' : ''}</button>`).join('')}</div>
-    <div class="muted small swap-hint">Your pick sticks as the default for this lift. Revert any time in Settings.</div>
+    <div class="swap-list">${opts.map((o) => `<button class="swap-opt ${o.isDefault ? 'is-default' : ''}" data-act="do-swap" data-bi="${bi}" data-ex="${o.id}">${esc(o.name)}${o.isDefault ? tag : ''}</button>`).join('')}</div>
+    <div class="muted small swap-hint">${free ? 'Just for today — your Just Lift rotation stays as it is.' : 'Your pick sticks as the default for this lift. Revert any time in Settings.'}</div>
   </details>`;
 }
 
@@ -482,7 +574,15 @@ function setRowControls(b, bi, si, st) {
       <span class="st-val">${st.reps == null ? 'MAX' : st.reps}</span>
       <button class="st-btn" data-act="inc" data-bi="${bi}" data-si="${si}" data-field="reps">+</button>
     </div>`;
-  return weightCtl + `<span class="x">×</span>` + repsCtl;
+  return weightCtl + `<span class="x">×</span>` + repsCtl + plateLine(b, st);
+}
+// What to load on the bar, per side — so you're never doing arithmetic between sets.
+function plateLine(b, st) {
+  if (b.loadType !== 'barbell' || st.weight == null) return '';
+  const p = engine.plateMath(st.weight, b.exerciseId, U());
+  if (!p) return '';
+  // The bar's weight is only worth saying when it isn't the standard one (EZ / trap).
+  return `<div class="plates">${p.perSide.length ? `<b>${esc(p.short)}</b><span class="muted"> /side</span>` : '<b>just the bar</b>'}${p.standard ? '' : `<span class="muted"> · ${p.bar}${U()} bar</span>`}</div>`;
 }
 function rirRow(bi, si, st) {
   const opts = [[0, '0'], [1, '1'], [2, '2'], [3, '3'], [4, '4'], [5, '5+']];
@@ -592,6 +692,7 @@ function renderProgress() {
       ${card('Deadlift — est. 1RM (' + u + ')', lineChart(ps.deadlift, { color: '#f87171', unit: u }))}
       ${card('Back Squat — est. 1RM (' + u + ')', lineChart(ps.back_squat, { color: '#fbbf24', unit: u }))}
       ${card('Overhead Press — est. 1RM (' + u + ')', lineChart(ps.overhead_press, { color: '#a78bfa', unit: u }))}
+      ${card('Bench Press — est. 1RM (' + u + ')', lineChart(ps.bench_press, { color: '#f472b6', unit: u }))}
       ${card('Pull-ups — max reps', lineChart(ps.pull_up, { color: '#36d399' }))}
       ${card('Push-ups — max reps', lineChart(ps.push_up, { color: '#60a5fa' }))}
       ${card('Bodyweight (' + u + ')', lineChart(ps.bodyweight, { color: '#34d399', unit: u }))}
@@ -662,6 +763,13 @@ function renderSettings() {
         <div class="muted small">These auto-update from your logs. Edit only if something looks off.</div>
       </div>
       <div class="card">
+        <div class="lbl">Your training week</div>
+        <div class="kv"><span>Days per week</span>
+          <div class="seg sm">${[2, 3, 4].map((n) => `<button class="seg-btn ${store.weekTarget(s) === n ? 'sel' : ''}" data-act="set-weektarget" data-val="${n}">${n}</button>`).join('')}</div>
+        </div>
+        ${weekTargetNote(s)}
+      </div>
+      <div class="card">
         <div class="lbl">Position in plan</div>
         <label class="kv"><span>Current week (1–52)</span><input class="mini-in" data-act="set-week" type="number" inputmode="numeric" value="${s.program.absWeek + 1}"></label>
         <div class="muted small">Sessions advance by completion, not the calendar — do them in any order on the Home board.</div>
@@ -706,6 +814,15 @@ function renderSettings() {
       <div class="card muted small">Forge v${store.VERSION} · auto-updates when online · not medical advice. Built for the New Christendom Press Games.</div>
     </main>`;
 }
+// Set this to your real life, not your best intentions — it's what stops the plan stalling.
+function weekTargetNote(s) {
+  const st = engine.scheduleStatus(s);
+  const n = store.weekTarget(s);
+  const actual = st && st.sessionsLast28 ? `You've averaged <b>${st.perWeek}</b> session${st.perWeek === 1 ? '' : 's'}/week over the last month. ` : '';
+  return `<div class="muted small">${actual}The week advances once you've done or skipped <b>${n}</b> of its 4 sessions — set this to what you'll really do and the plan tracks you instead of stalling.
+    ${n < 4 ? `You still get the block's most important ${n}; the rest stay on the board as extra credit, and nothing is ever deleted.` : 'All four count toward the week.'}</div>`;
+}
+
 function maxRow(label, id, val, u) {
   return `<label class="kv"><span>${label}</span><span class="row"><input class="mini-in" data-act="set-max" data-id="${id}" type="number" inputmode="numeric" value="${esc(val || '')}"><small class="muted">${u}</small></span></label>`;
 }
@@ -743,6 +860,10 @@ function onClick(e) {
     case 'open-readiness': openReadiness(); break;
     // navigation / start
     case 'start': startWorkout(t.dataset.optional || null, (t.dataset.idx != null && t.dataset.idx !== '') ? +t.dataset.idx : null); break;
+    // just lift
+    case 'free-pick': freePick = (freePick && freePick.focus === t.dataset.focus) ? null : { focus: t.dataset.focus, variant: 0 }; render(); break;
+    case 'free-reroll': if (freePick) freePick.variant++; render(); break;
+    case 'free-start': if (freePick) { const f = freePick; freePick = null; startWorkout(null, null, f); } break;
     case 'skip': store.skipSession(+t.dataset.idx); render(); toast("Skipped — it comes back around next week."); break;
     case 'unskip': store.unskipSession(+t.dataset.idx); render(); break;
     case 'toggle-preview': {
@@ -772,6 +893,14 @@ function onClick(e) {
     case 'rest-add': rest.endAt += 15000; tickRest(); break;
     // settings
     case 'set-units': store.setSettings({ units: t.dataset.val }); render(); break;
+    case 'set-weektarget': {
+      const n = +t.dataset.val;
+      store.setSettings({ weekTarget: n });
+      store.reconcileWeek();     // lowering it may already complete the current week
+      render();
+      toast(`Your week is now ${n} session${n === 1 ? '' : 's'}.`);
+      break;
+    }
     case 'export': doExport(); break;
     case 'import': document.getElementById('import-file').click(); break;
     case 'import-health': document.getElementById('health-file').click(); break;
@@ -851,10 +980,10 @@ function saveReadiness() {
 function openReadiness() { f4(); render(); }
 function f4() { ['sleep', 'soreness', 'energy', 'stress', 'motivation'].forEach((k) => delete onb['rd_' + k]); store.update((s) => { const day = new Date().toISOString().slice(0, 10); s.readiness = s.readiness.filter((r) => r.dateISO.slice(0, 10) !== day); }); }
 
-function startWorkout(optionalDayKey, index) {
+function startWorkout(optionalDayKey, index, free) {
   const s = store.get();
   if (s.active) { location.hash = '#/workout'; render(); return; } // finish or pause the current one first
-  const active = buildActive(s, optionalDayKey, index);
+  const active = buildActive(s, optionalDayKey, index, free);
   store.startSession(active);
   location.hash = '#/workout';
   render();
@@ -899,13 +1028,17 @@ function doSwap(bi, exId) {
   const entry = a.entries[bi]; if (!entry) return;
   const base = entry.baseExId || entry.exerciseId;
   const revert = exId === base;
-  store.setExPref(base, revert ? null : exId);              // remember as the standing default (or clear on revert)
+  // A program lift you swap becomes your standing default. A Just Lift pick is already a
+  // rotation, so swapping it is a one-off — pinning it would break the variety.
+  if (a.free) store.patchActive((x) => { (x.freeSlots || []).forEach((sl) => { if (sl.id === entry.id) sl.ex = exId; }); });
+  else store.setExPref(base, revert ? null : exId);
   const block = engine.represcribeSlot(store.get(), a, entry.id, revert ? null : exId);
   if (!block) { toast('Could not swap that one.'); return; }
   store.patchActive((x) => { x.entries[bi] = entryFromBlock(block); });
   rest.endAt = 0;
   renderWorkout();
-  toast(revert ? `Back to ${getExercise(base).name}.` : `Now doing ${getExercise(exId).name} — saved as your default.`);
+  toast(revert ? `Back to ${getExercise(base).name}.`
+    : `Now doing ${getExercise(exId).name}${a.free ? '.' : ' — saved as your default.'}`);
 }
 function moveCursor(dir) {
   const a = store.get().active; if (!a) return;
@@ -937,7 +1070,7 @@ function finishPanel(a) {
   for (let v = 1; v <= 10; v++) chips += `<button class="rpe-chip big ${rpe === v ? 'sel' : ''}" data-act="finish-rpe" data-val="${v}">${v}</button>`;
   return `<header class="wk-top"><button class="icon-btn" data-act="finish-cancel">‹</button><div class="wk-title">Finish session</div><span style="width:44px"></span></header>
     <main class="wk-main finish-main">
-      <div class="finish-stat"><div><div class="big2">${logged}</div><div class="muted small">sets logged</div></div><div><div class="big2">${dur}m</div><div class="muted small">minutes</div></div><div><div class="big2">${esc(a.optional ? '＋' : (a.sessionInWeek + 1) + '/4')}</div><div class="muted small">${a.optional ? 'bonus' : 'session'}</div></div></div>
+      <div class="finish-stat"><div><div class="big2">${logged}</div><div class="muted small">sets logged</div></div><div><div class="big2">${dur}m</div><div class="muted small">minutes</div></div><div><div class="big2">${esc(a.free ? '⚒︎' : a.optional ? '＋' : (a.sessionInWeek + 1) + '/4')}</div><div class="muted small">${a.free ? 'just lift' : a.optional ? 'bonus' : 'session'}</div></div></div>
       <div class="lbl" style="margin-top:20px">How hard was that overall?</div>
       <div class="rpe-grid">${chips}</div>
       <div class="muted small">1 = easy · 7 = hard but solid · 10 = everything you had</div>
@@ -953,7 +1086,7 @@ function finishSave() {
   const session = {
     id: a.startedAt, dateISO: new Date().toISOString(), startedAt: a.startedAt,
     absWeek: a.absWeek, sessionInWeek: a.sessionInWeek, dayKey: a.dayKey, dayName: a.dayName,
-    optional: a.optional, sessionRPE: srpe, durationMin, tweaks: a.tweakAreas || [],
+    optional: a.optional, free: a.free || null, sessionRPE: srpe, durationMin, tweaks: a.tweakAreas || [],
     entries: a.entries.map((e) => ({
       exerciseId: e.exerciseId, name: e.name,
       sets: e.sets.map((s) => ({ weight: s.weight ?? null, reps: s.reps ?? null, seconds: s.seconds ?? null, rir: s.rir ?? null, rpe: s.rpe ?? null, targetRir: s.targetRir ?? null, kind: s.kind, done: s.done })),
@@ -964,9 +1097,8 @@ function finishSave() {
   store.addTweaks(a.tweakAreas || []);
   const patch = engine.ingestModel(store.get(), session);
   if (a.optional) {
-    // optional sessions log + update model, but don't advance the core pointer
-    store.update((st) => { st.sessions.push(session); st.active = null; Object.assign(st.maxes, patch);
-      for (const en of session.entries) { const arr = (st.history[en.exerciseId] = st.history[en.exerciseId] || []); for (const set of en.sets) if (set.done) arr.push({ dateISO: session.dateISO, weight: set.weight, reps: set.reps, rpe: set.rpe }); } });
+    // Just Lift + optional days: logged and learned from, but the program pointer stays put
+    store.logExtraSession(session, patch);
   } else {
     store.seedMaxes(patch);
     store.commitSession(session);
@@ -974,7 +1106,8 @@ function finishSave() {
   rest.endAt = 0;
   location.hash = '#/today';
   render();
-  toast(a.isTest ? 'Test logged — maxes updated. 💪' : 'Session done. The plan just got smarter.');
+  toast(a.free ? 'Logged. Every rep counts — your numbers just got sharper. 💪'
+    : a.isTest ? 'Test logged — maxes updated. 💪' : 'Session done. The plan just got smarter.');
 }
 
 function setMaxEdit(id, val) {

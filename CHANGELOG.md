@@ -2,6 +2,43 @@
 
 All notable changes to Forge (NCP Games Trainer).
 
+## [0.7.0] — 2026-08-04 — Plate math + a week that matches real life (user request)
+- **Plate calculator** on every barbell set: `45 · 10 · 2.5 /side` under the weight, updating live as
+  you step the load. Greedy from the heaviest plate (45/35/25/15/10/5/2.5/1.25), exact at every 5lb
+  increment the engine prescribes. Non-standard bars are handled and labelled (EZ 25lb, trap 60lb);
+  dumbbell/bodyweight work shows nothing.
+- **Weekly target (2/3/4)** in Settings: the week now advances once you've done or skipped *your*
+  number, not four — so training twice a week no longer stalls the program forever. Set it and
+  Forge shows your real 28-day average next to it.
+- **Block priority order**: with a target under 4 you get the sessions that block exists to build,
+  in order (deadlift leads Max Strength; the two qualifier events lead a test week). The rest stay
+  on the board as **extra credit** — still startable, never deleted. "Up next" follows priority too.
+- **Drift readout** on Home: program week vs calendar week, how far behind you are, and weeks to the
+  qualifier — the plan waits for you, but the Games don't. Header now shows today's real date
+  instead of the date the current program week *would* have been.
+- **Re-entry damping now applies to program sessions too** (was Just Lift only): ≥14 days off trims
+  loads ~8%, ≥28 days ~15%, with a banner saying so. After a layoff the ACWR advice says "ease back
+  in" instead of "you can push a little more".
+- Schema v6 (adds `settings.weekTarget`, defaults to the original 4-day week — existing data migrates
+  untouched). SW cache → forge-v11.
+
+## [0.6.0] — 2026-08-03 — "Just Lift": a second way to train (user request)
+- **Just Lift** on the Home screen: pick **Leg / Push / Pull / Upper / Full Body** and Forge builds a
+  complete session on the spot — every weight, set and rep filled in from your current maxes, today's
+  readiness, ACWR and any flagged niggles. Preview it, **↻ different** for another roll, then Start.
+- Exercise picks go to whatever you've trained **least recently** (variety with no decision to make);
+  rep schemes rotate **Volume → Heavy → Pump** per focus (daily-undulating — PROGRAM-SCIENCE §8).
+- **Re-entry damping**: ≥14 days since your last session trims loads ~8%, ≥28 days ~15%, with a note
+  saying so. Stored maxes describe the athlete you were, not the one coming back from a layoff.
+- **The 52-week plan is untouched.** Free lifts log as extra sessions: full record, history, charts,
+  maxes and load monitor — but the week pointer never moves. Nothing existing was changed or lost.
+- Swapping inside a free lift is a one-off (it doesn't pin a standing default and break the rotation);
+  swapping inside a program lift still saves your default as before.
+- Fixes along the way: est-1RM now uses logged **reps-in-reserve** (was assuming RIR 1); a rep max with
+  no measurement borrows from the nearest measured lift (9 pull-ups no longer prescribes 3 chin-ups);
+  Bench Press added to Progress; paused Just Lift / optional sessions get a **Resume** bar on Home.
+- No schema change — existing data loads as-is. SW cache → forge-v10.
+
 ## [0.4.0] — 2026-06-18 — Flexible week: start any / skip / never lose a lift (user request)
 - The week is now a **completion-based queue, not a calendar week**: start *any* session in any order,
   **skip** one you can't do (with undo), and the week only advances to the next once all four are

@@ -83,7 +83,9 @@ export const PHASES = [
     emphasis: { strength: 2, power: 0, muscle: 2, aerobic: 3, anaerobic: 1 },
     focus: 'Re-teach the lifts light, build tendons & bones (they adapt slower than muscle), and lay an aerobic base with run/walk. The win condition for these 8 weeks is arriving healthy with a base — not soreness. Deload every 4 weeks because recovery capacity is low early.',
     layoutNote: 'Suggested: Mon Lower · Tue Upper · Thu Run · Sat Mixed. Keep a rest day between the lower lift and any hard running.',
-    schedule: ['d1', 'd2', 'd3', 'd4'], testSchedule: FULL_TEST,
+    schedule: ['d1', 'd2', 'd3', 'd4'],
+    // priority — lower + upper re-teach the lifts and build tissue; aerobic base next; power intro last
+    priority: [0, 1, 2, 3], testSchedule: FULL_TEST,
     days: {
       d1: { name: 'Lower Strength', tag: 'strength', slots: [
         { id: 'sq', ex: 'back_squat', scheme: { t: 'strength', sets: 3, reps: 6, rir: 4, rest: 150, prog: 'load' } },
@@ -116,7 +118,9 @@ export const PHASES = [
     emphasis: { strength: 2, power: 1, muscle: 3, aerobic: 2, anaerobic: 2 },
     focus: 'Build the muscle and rep-capacity everything stands on — more pull-ups & push-ups, thicker engine. Sandbag work here is CARRIES + GRIP only (explosive shouldering waits until you have a strength base). Easy aerobic maintained; strides added for running economy.',
     layoutNote: 'Suggested: Mon Lower · Tue Upper · Thu Run+strides · Sat Sandbag/Metcon.',
-    schedule: ['d1', 'd2', 'd3', 'd4'], testSchedule: FULL_TEST,
+    schedule: ['d1', 'd2', 'd3', 'd4'],
+    // priority — the two hypertrophy days ARE the block; carries/metcon next; the easy run is most droppable
+    priority: [0, 1, 3, 2], testSchedule: FULL_TEST,
     days: {
       d1: { name: 'Lower Hypertrophy', tag: 'strength', slots: [
         { id: 'sq', ex: 'back_squat', scheme: { t: 'strength', sets: 4, reps: 8, rir: 2, rest: 150, prog: 'load' } },
@@ -155,7 +159,9 @@ export const PHASES = [
     emphasis: { strength: 1, power: 1, muscle: 1, aerobic: 3, anaerobic: 2 },
     focus: 'A dedicated polarized (~80/20) block to build the aerobic engine that the mile and every metcon run on — a non-runner needs base BEFORE intervals. Strength drops to 2 maintenance sessions (heavy, low-volume) so it holds without blunting the aerobic adaptation. Sandbag SHOULDER technique is introduced now that you have a base — light and crisp.',
     layoutNote: 'Suggested: Mon Lower(maint)+sandbag tech · Tue Easy run · Thu Upper(maint) · Sat Long easy + 1 tempo. Easy means EASY — that is the point.',
-    schedule: ['d1', 'd2', 'd3', 'd4'], testSchedule: FULL_TEST,
+    schedule: ['d1', 'd2', 'd3', 'd4'],
+    // priority — aerobic volume is the point — but keep one lift in; strength holds on 1-2 sessions/week (§2)
+    priority: [1, 0, 3, 2], testSchedule: FULL_TEST,
     days: {
       d1: { name: 'Lower (maintain) + Sandbag Tech', tag: 'strength', slots: [
         { id: 'sq', ex: 'back_squat', scheme: { t: 'strength', sets: 3, reps: 5, rir: 2, rest: 180, prog: 'load', note: 'Just enough heavy work to keep your strength while the engine grows.' } },
@@ -182,7 +188,9 @@ export const PHASES = [
     emphasis: { strength: 3, power: 2, muscle: 2, aerobic: 2, anaerobic: 2 },
     focus: 'Turn muscle into raw force — the deadlift 1RM and heavy sandbag live here. Daily-undulating: heavy days and rep days alternate. Endurance & muscular-endurance shift to MAINTENANCE (kept sharp, low volume) so strength climbs without interference. Power kept alive with a weekly jump/speed touch.',
     layoutNote: 'Suggested: Mon Deadlift · Tue Upper · Thu Run quality (legs recovered) · Sat Heavy sandbag+power. Never run hard the day before deadlift day.',
-    schedule: ['d1', 'd2', 'd3', 'd4'], testSchedule: FULL_TEST,
+    schedule: ['d1', 'd2', 'd3', 'd4'],
+    // priority — deadlift day is non-negotiable here, then upper; sandbag/power next; the run is maintenance
+    priority: [0, 1, 3, 2], testSchedule: FULL_TEST,
     days: {
       d1: { name: 'Deadlift Strength', tag: 'strength', slots: [
         { id: 'dl', ex: 'deadlift', scheme: { t: 'topset', sets: 4, reps: 4, rir: 2, rest: 210, backoff: 0.9, prog: 'load' } },
@@ -212,7 +220,9 @@ export const PHASES = [
     emphasis: { strength: 2, power: 3, muscle: 1, aerobic: 2, anaerobic: 3 },
     focus: 'Convert strength into explosive power and sharpen the mile + event metcons. Strength shifts to MAINTENANCE via fast, sub-maximal lifting (speed deadlifts hold the 1RM). VO2max intervals get the mile fast; the field metcon gets rehearsed for real. Keep sprints fully-recovered — quality, not fatigue.',
     layoutNote: 'Suggested: Mon Lower power · Tue VO2 intervals · Thu Upper power+volume · Sat Sandbag power + field metcon. Keep 48h before any sprint/sandbag testing clear of hard eccentric running.',
-    schedule: ['d1', 'd2', 'd3', 'd4'], testSchedule: FULL_TEST,
+    schedule: ['d1', 'd2', 'd3', 'd4'],
+    // priority — lower power + the sandbag/metcon day carry two finals events; then the mile intervals
+    priority: [0, 3, 1, 2], testSchedule: FULL_TEST,
     days: {
       d1: { name: 'Lower Power (maintain strength)', tag: 'strength', slots: [
         { id: 'dl', ex: 'deadlift', scheme: { t: 'power', sets: 6, reps: 2, rest: 120, pct: 0.7, note: 'Speed deadlifts — every rep as fast as possible. Maintains the 1RM, builds rate of force.' } },
@@ -248,6 +258,8 @@ export const PHASES = [
     focus: 'Peak the two qualifier lifts — a max deadlift and "Cindy" — and arrive fresh. Volume drops hard the last two weeks while sharpness stays high. This is where ten months of base becomes a number on the leaderboard.',
     layoutNote: 'Suggested: Mon Deadlift peak · Wed Cindy practice · Fri Pull/Push sharpen · then easy aerobic. Rest is a weapon now.',
     schedule: ['d1', 'd2', 'd3', 'd4'],
+    // priority — deadlift and Cindy ARE the qualifier — nothing outranks them
+    priority: [0, 1, 2, 3],
     days: {
       d1: { name: 'Deadlift Peak', tag: 'strength', slots: [
         { id: 'dl', ex: 'deadlift', scheme: { t: 'topset', sets: 4, reps: 2, rir: 1, rest: 240, backoff: 0.88, prog: 'load', note: 'Heavy, crisp doubles climbing toward your max. Perfect setup every rep.' } },
@@ -281,6 +293,8 @@ export const PHASES = [
     focus: 'The ~5 weeks between qualifier and finals. A long taper would DE-TRAIN the finals events (their qualities fade in days), so this is a mini block: recover, then re-overload the sandbag ladder, the fast mile, and the field metcon — keeping the deadlift alive on light heavy primers — then taper into competition day.',
     layoutNote: 'Suggested: Mon Sandbag ladder sim + DL primer · Tue Mile tune · Thu Field metcon sim + sprints · Sat easy + mobility.',
     schedule: ['d1', 'd2', 'd3', 'd4'],
+    // priority — one session per finals event: sandbag, mile, metcon; the easy day is last
+    priority: [0, 1, 2, 3],
     days: {
       d1: { name: 'Sandbag Ladder Sim + DL Primer', tag: 'mixed', slots: [
         { id: 'sb', ex: 'sandbag_shoulder', scheme: { t: 'metcon', rounds: 1, timeCap: 120, items: [{ ex: 'sandbag_shoulder', reps: 'max' }], note: 'EVENT SIM: 2-min max shoulders, climbing bag weights. Pace the first 60s, then empty it.' } },
@@ -341,6 +355,21 @@ export function getDay(dayKey, absWeek) {
 
 export function optionalDays() { return ['opt_aerobic', 'opt_skill']; }
 
+// ---- session priority: what matters most in this block if you can't train four times ----
+// Drives "up next" and, when your weekly target is under 4, which sessions make up your week.
+// Each block leads with the work that block exists to build; maintenance work falls to the back.
+const TEST_PRIORITY = [0, 3, 2, 1]; // qualifier events first: strength, engine (Cindy), body, run
+export function sessionPriority(absWeek) {
+  const ctx = planContext(absWeek);
+  if (ctx.isTestWeek && ctx.phase.testSchedule) return TEST_PRIORITY.slice();
+  return (ctx.phase.priority || [0, 1, 2, 3]).slice();
+}
+// The sessions that count toward your week, in the order they appear on the board.
+export function weekTargetIndices(absWeek, target) {
+  const n = Math.max(1, Math.min(4, target || 4));
+  return sessionPriority(absWeek).slice(0, n);
+}
+
 export function dateForWeek(startISO, absWeek) {
   const d = new Date(startISO);
   d.setDate(d.getDate() + absWeek * 7);
@@ -351,3 +380,71 @@ export function phaseTimeline() {
   return PHASES.map((p) => ({ id: p.id, name: p.name, short: p.short, start: p._start, end: p._end,
     weeks: p.weeks, focus: p.focus, emphasis: p.emphasis, layoutNote: p.layoutNote }));
 }
+
+// ======================= JUST LIFT — the on-demand lift day =======================
+// A second way to train, for the days you just want to lift. Pick a focus and the engine
+// builds a full session from the same exercise library, the same working maxes and the same
+// autoregulation as the 52-week plan. It never touches the plan: free lifts log as extra
+// sessions, so the program stays exactly where you left it.
+//
+// A focus is an ordered list of ROLES. Each role carries a POOL; the engine picks whichever
+// lift you've trained least recently, so two leg days in a row aren't the same leg day — no
+// decision required from you. Rep schemes come from the FLAVOR, which rotates
+// Volume → Heavy → Pump across sessions of that focus: daily-undulating periodization
+// (PROGRAM-SCIENCE §3), the same structure the later program blocks use.
+
+// Flavor tables. `roles` maps a role to its set/rep/RIR/rest scheme; bwPct scales bodyweight
+// sets off your rep max; holdSecs sizes any timed core hold.
+export const LIFT_FLAVORS = [
+  { id: 'volume', label: 'Volume', why: 'Moderate reps, moderate rest — the bread-and-butter day that adds muscle.',
+    bwPct: 0.75, holdSecs: 40,
+    roles: { main: { sets: 4, reps: 8, rir: 2, rest: 150 }, second: { sets: 3, reps: 10, rir: 2, rest: 120 },
+      accessory: { sets: 3, reps: 12, rir: 2, rest: 75 }, arms: { sets: 3, reps: 12, rir: 1, rest: 60 } } },
+  { id: 'heavy', label: 'Heavy', why: 'Low reps, long rests. This is the day that moves your top-end strength.',
+    bwPct: 0.8, holdSecs: 45,
+    roles: { main: { sets: 5, reps: 3, rir: 2, rest: 180 }, second: { sets: 4, reps: 5, rir: 2, rest: 150 },
+      accessory: { sets: 3, reps: 8, rir: 2, rest: 90 }, arms: { sets: 3, reps: 10, rir: 1, rest: 60 } } },
+  { id: 'pump', label: 'Pump', why: 'Higher reps, shorter rest — hard but joint-friendly, and it still builds.',
+    bwPct: 0.7, holdSecs: 35,
+    roles: { main: { sets: 4, reps: 12, rir: 2, rest: 105 }, second: { sets: 3, reps: 15, rir: 1, rest: 75 },
+      accessory: { sets: 3, reps: 15, rir: 1, rest: 60 }, arms: { sets: 3, reps: 15, rir: 1, rest: 45 } } },
+];
+
+export const LIFT_FOCUS = [
+  { id: 'legs', name: 'Leg Day', blurb: 'squat · hinge · single-leg', roles: [
+    { id: 'sq', role: 'main', pool: ['back_squat', 'front_squat', 'goblet_squat'] },
+    { id: 'hinge', role: 'second', pool: ['romanian_deadlift', 'deadlift', 'hip_thrust', 'db_rdl'] },
+    { id: 'uni', role: 'accessory', pool: ['bulgarian_split_squat', 'db_reverse_lunge', 'db_step_up', 'walking_lunge'] },
+    { id: 'core', role: 'accessory', pool: ['hanging_leg_raise', 'ab_wheel', 'plank', 'hollow_hold'] },
+  ] },
+  { id: 'push', name: 'Push Day', blurb: 'press · press · triceps', roles: [
+    { id: 'press1', role: 'main', pool: ['bench_press', 'overhead_press', 'db_bench_press'] },
+    { id: 'press2', role: 'second', pool: ['overhead_press', 'db_shoulder_press', 'push_press', 'db_floor_press'] },
+    { id: 'push3', role: 'accessory', pool: ['hand_release_push_up', 'push_up', 'incline_push_up'] },
+    { id: 'arms', role: 'arms', pool: ['tricep_pushdown'] },
+    { id: 'core', role: 'accessory', pool: ['plank', 'hollow_hold', 'ab_wheel'] },
+  ] },
+  { id: 'pull', name: 'Pull Day', blurb: 'pull-up · row · curls', roles: [
+    { id: 'main', role: 'main', pool: ['deadlift', 'barbell_row'] },
+    { id: 'vpull', role: 'second', pool: ['pull_up', 'lat_pulldown', 'chin_up'] },
+    { id: 'hpull', role: 'accessory', pool: ['db_row', 'cable_row', 'inverted_row', 'barbell_row'] },
+    { id: 'arms', role: 'arms', pool: ['ez_curl', 'db_curl'] },
+    { id: 'grip', role: 'accessory', pool: ['dead_hang', 'farmer_carry', 'suitcase_carry', 'hanging_leg_raise'] },
+  ] },
+  { id: 'upper', name: 'Upper Body', blurb: 'balanced press + pull', roles: [
+    { id: 'press1', role: 'main', pool: ['overhead_press', 'bench_press', 'db_bench_press'] },
+    { id: 'pull1', role: 'second', pool: ['pull_up', 'lat_pulldown', 'chin_up'] },
+    { id: 'press2', role: 'accessory', pool: ['db_shoulder_press', 'db_floor_press', 'push_press', 'incline_push_up'] },
+    { id: 'pull2', role: 'accessory', pool: ['db_row', 'cable_row', 'barbell_row'] },
+    { id: 'arms', role: 'arms', pool: ['ez_curl', 'db_curl', 'tricep_pushdown'] },
+  ] },
+  { id: 'full', name: 'Full Body', blurb: 'hinge · press · pull · carry', roles: [
+    { id: 'main', role: 'main', pool: ['deadlift', 'back_squat', 'front_squat', 'trap_bar_deadlift'] },
+    { id: 'press', role: 'second', pool: ['overhead_press', 'bench_press', 'db_bench_press', 'db_shoulder_press'] },
+    { id: 'pull', role: 'second', pool: ['pull_up', 'barbell_row', 'lat_pulldown', 'db_row'] },
+    { id: 'legs2', role: 'accessory', pool: ['bulgarian_split_squat', 'db_reverse_lunge', 'romanian_deadlift', 'hip_thrust'] },
+    { id: 'carry', role: 'accessory', pool: ['farmer_carry', 'sandbag_carry', 'suitcase_carry'] },
+  ] },
+];
+
+export function liftFocus(id) { return LIFT_FOCUS.find((f) => f.id === id) || LIFT_FOCUS[0]; }

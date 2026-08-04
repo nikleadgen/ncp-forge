@@ -50,6 +50,13 @@ adjusting the plan set-to-set (RPE/RIR), session-to-session (daily readiness), w
 ACWR), and cycle-to-cycle (measured progress). Use is meant to be near-thoughtless: open → today's
 workout → log a number → done.
 
+**Two ways to train (both go through the same engine):**
+1. **The program** — the 52-week periodized macrocycle in `js/program.js` (`PHASES`). The pointer
+   advances by *completed sessions*, never the calendar.
+2. **Just Lift** — an on-demand lift day (legs/push/pull/upper/full) built by `engine.buildLiftDay()`
+   from the `LIFT_FOCUS` / `LIFT_FLAVORS` templates in `program.js`. Rationale in PROGRAM-SCIENCE §8.
+   **Free lifts never advance the program pointer** — they log via `store.logExtraSession()`.
+
 **Primary goals (priority order):**
 - Take the operator from detrained → **top-30 online qualifier → podium at the in-person finals**.
 - Deliver an autoregulating program whose every decision traces to `docs/PROGRAM-SCIENCE.md`.
