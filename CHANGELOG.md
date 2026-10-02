@@ -2,6 +2,21 @@
 
 All notable changes to Forge (NCP Games Trainer).
 
+## [0.8.1] — 2026-10-02 — Smarter set-to-set + reorder your lifts (user request)
+- **Reorder before Start**: in Pick your lifts, tap **⇅ Reorder** and move lifts with ↑ ↓ (✕ removes).
+- **Set-to-set steering rebuilt.** Each logged set compares reps done + reps left against the plan
+  and re-prescribes **every** remaining set (was: only the next one, and only after an RIR tap).
+  Missing reps now counts on its own; within ±1 rep you stay at the weight you just used; beyond it
+  the load moves by exactly what the set showed (today's e1RM), not a fixed ±4–7%. Bodyweight lifts
+  move the rep target instead. Changed sets get a ↑/↓ marker and a toast says why.
+- **Working maxes can come down** on real evidence (logged RIR or missed reps, best set >5% under
+  the prescription), a third of the gap per session — so after time off the program, Just Lift
+  and Pick your lifts all stop prescribing yesterday's numbers. Readiness-trimmed, deload and
+  niggle-lightened days done as written never count as a drop.
+- Fix: a session's **best** set now sets the max (was whichever qualifying set came last).
+- Sets now record their prescription (`targetReps`, `planWeight`) alongside what you did — additive,
+  no schema change; older logs simply skip the drop check. SW cache → forge-v13.
+
 ## [0.8.0] — 2026-10-02 — Pick your lifts (user request)
 - **Pick your lifts** at the top of Home: choose exactly the lifts you'll do, by muscle group (Back,
   Shoulders, Chest, Legs, Arms, Core, Carry & Grip, Power), in the order you'll do them, then Start.

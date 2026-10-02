@@ -261,14 +261,15 @@ function renderPick() {
   pick.add = !!(s.active && s.active.free === 'pick');
   const busy = !!(s.active && !pick.add);
   const menu = engine.pickMenu(s);
-  if (!menu.some((g) => g.id === pick.tab)) pick.tab = menu[0].id;
+  if (pick.tab === 'order' && pick.ids.length < 2) pick.tab = pick.last || menu[0].id;
+  if (pick.tab !== 'order' && !menu.some((g) => g.id === pick.tab)) pick.tab = menu[0].id;
   const group = menu.find((g) => g.id === pick.tab);
   const inWorkout = new Set(pick.add ? s.active.entries.map((e) => e.baseExId || e.exerciseId) : []);
   const tabs = menu.map((g) => {
     const n = g.ex.filter((id) => pick.ids.includes(id)).length;
     return `<button class="focus-chip ${g.id === pick.tab ? 'sel' : ''}" data-act="pick-tab" data-g="${g.id}">${esc(g.name)}${n ? ` <span class="pick-badge">${n}</span>` : ''}</button>`;
   }).join('');
-  const rows = group.ex.map((id) => {
+  const rows = pick.tab === 'order' ? orderRows() : group.ex.map((id) => {
     const ex = getExercise(id);
     const pos = pick.ids.indexOf(id);
     const locked = inWorkout.has(id);
@@ -280,7 +281,8 @@ function renderPick() {
     </button>`;
   }).join('');
   const n = pick.ids.length;
-  const tray = pick.ids.map((id, k) => `<button class="tray-chip" data-act="pick-toggle" data-ex="${id}">${k + 1} · ${esc(getExercise(id).name)} ✕</button>`).join('');
+  const tray = pick.tab === 'order' ? '' : pick.ids.map((id, k) => `<button class="tray-chip" data-act="pick-toggle" data-ex="${id}">${k + 1} · ${esc(getExercise(id).name)} ✕</button>`).join('')
+    + (n > 1 ? '<button class="tray-chip reorder" data-act="pick-order">⇅ Reorder</button>' : '');
   const go = pick.add ? `Add ${n} to workout →` : `Start · ${n} lift${n === 1 ? '' : 's'} →`;
   root.innerHTML = `
     <header class="wk-top">
@@ -290,13 +292,33 @@ function renderPick() {
     </header>
     <main class="wk-main pick-main">
       <div class="focus-row pick-tabs">${tabs}</div>
+      ${pick.tab === 'order' ? '<div class="muted small pick-order-sub">Your order — tap ↑ ↓ to move a lift. Tap a group above to add more.</div>' : ''}
       <div class="pick-list">${rows || '<div class="muted small">Nothing in this group fits your gear.</div>'}</div>
     </main>
     <footer class="wk-foot pick-foot">
-      ${n ? `<div class="pick-tray">${tray}</div>` : ''}
+      ${tray ? `<div class="pick-tray">${tray}</div>` : ''}
       ${busy ? '<div class="muted small">Finish or pause your current session first.</div>'
         : `<button class="btn-primary" data-act="pick-start" ${n ? '' : 'disabled'}>${n ? go : 'Tap lifts to add them'}</button>`}
     </footer>`;
+}
+// The chosen lifts as a list you can rearrange before Start.
+function orderRows() {
+  const n = pick.ids.length;
+  return pick.ids.map((id, k) => `<div class="pick-row on order-row">
+      <span class="pick-num">${k + 1}</span>
+      <span class="pick-mid"><span class="pick-name">${esc(getExercise(id).name)}</span></span>
+      <span class="order-btns">
+        <button class="ord-btn" data-act="pick-move" data-ex="${id}" data-dir="-1" ${k === 0 ? 'disabled' : ''} aria-label="Move up">↑</button>
+        <button class="ord-btn" data-act="pick-move" data-ex="${id}" data-dir="1" ${k === n - 1 ? 'disabled' : ''} aria-label="Move down">↓</button>
+        <button class="ord-btn x" data-act="pick-toggle" data-ex="${id}" aria-label="Remove">✕</button>
+      </span>
+    </div>`).join('');
+}
+function movePick(id, dir) {
+  const i = pick.ids.indexOf(id), j = i + dir;
+  if (i < 0 || j < 0 || j >= pick.ids.length) return;
+  [pick.ids[i], pick.ids[j]] = [pick.ids[j], pick.ids[i]];
+  renderPick();
 }
 function togglePick(id) {
   const i = pick.ids.indexOf(id);
@@ -527,7 +549,9 @@ function entryFromBlock(b) {
     cues: b.cues, note: b.note, demo: b.demo, rest: b.rest, paceHint: b.paceHint, detail: b.detail,
     mode: b.mode, minutes: b.minutes, perMinute: b.perMinute, rounds: b.rounds, items: b.items, timeCap: b.timeCap,
     loadType: b.loadType, isTest: b.isTest, targetRir: b.targetRir, caution: b.caution,
-    sets: (b.sets || []).map((st) => ({ ...st, done: false, rpe: null, rir: null })),
+    // targetReps/planWeight freeze what was prescribed, so later sets (and the model) can compare
+    // what you did against it even after you've changed the numbers
+    sets: (b.sets || []).map((st) => ({ ...st, targetReps: st.reps, planWeight: st.weight, done: false, rpe: null, rir: null })),
     resultSeconds: null, resultRounds: null, topWeight: null, result: '',
   };
 }
@@ -691,10 +715,11 @@ function rirRow(bi, si, st) {
   opts.forEach(([v, lbl]) => { chips += `<button class="rpe-chip ${st.rir === v ? 'sel' : ''}" data-act="setrir" data-bi="${bi}" data-si="${si}" data-val="${v}">${lbl}</button>`; });
   return `<div class="rpe-row"><span class="muted small">reps left?</span>${chips}</div>`;
 }
+const adjMark = (st) => (!st.done && st.adj ? `<span class="adj ${st.adj}">${st.adj === 'up' ? '↑' : '↓'}</span>` : '');
 function setsBody(b, bi) {
   return `<div class="sets">${b.sets.map((st, si) => `
     <div class="setrow ${st.done ? 'done' : ''}">
-      <div class="set-tag">${st.kind === 'top' ? 'TOP' : st.kind === 'backoff' ? 'B' + si : (b.sets.length > 1 ? si + 1 : '•')}</div>
+      <div class="set-tag">${st.kind === 'top' ? 'TOP' : st.kind === 'backoff' ? 'B' + si : (b.sets.length > 1 ? si + 1 : '•')}${adjMark(st)}</div>
       <div class="set-ctls">${setRowControls(b, bi, si, st)}</div>
       <button class="done-btn ${st.done ? 'on' : ''}" data-act="logset" data-bi="${bi}" data-si="${si}">${st.done ? '✓' : 'Log'}</button>
     </div>
@@ -704,7 +729,7 @@ function setsBody(b, bi) {
 function repsBody(b, bi) {
   return `<div class="sets">${b.sets.map((st, si) => `
     <div class="setrow ${st.done ? 'done' : ''}">
-      <div class="set-tag">${b.sets.length > 1 ? si + 1 : '•'}</div>
+      <div class="set-tag">${b.sets.length > 1 ? si + 1 : '•'}${adjMark(st)}</div>
       <div class="set-ctls">${setRowControls(b, bi, si, st)}</div>
       <button class="done-btn ${st.done ? 'on' : ''}" data-act="logset" data-bi="${bi}" data-si="${si}">${st.done ? '✓' : 'Log'}</button>
     </div>
@@ -975,7 +1000,9 @@ function onClick(e) {
       break;
     }
     case 'pick-add': pick = { tab: pick.tab, ids: [], add: true }; location.hash = '#/pick'; scrollTo(0, 0); break;
-    case 'pick-tab': pick.tab = t.dataset.g; renderPick(); scrollTo(0, 0); break;
+    case 'pick-tab': pick.tab = pick.last = t.dataset.g; renderPick(); scrollTo(0, 0); break;
+    case 'pick-order': pick.tab = 'order'; renderPick(); scrollTo(0, 0); break;
+    case 'pick-move': movePick(t.dataset.ex, +t.dataset.dir); break;
     case 'pick-toggle': togglePick(t.dataset.ex); break;
     case 'pick-start': pickStart(); break;
     case 'pick-cancel': { const back = pick.add ? '#/workout' : '#/today'; pick.ids = []; pick.add = false; location.hash = back; break; }
@@ -1124,17 +1151,30 @@ function logSet(bi, si) {
   if (st.done) {
     const sec = blk.rest || store.get().settings.restDefault || 120;
     if (store.get().settings.autoRest !== false && ['sets', 'reps', 'hold', 'carry'].includes(blk.kind)) startRest(sec);
-    // set-to-set nudge
-    const adj = engine.adjustAfterSet(st, { reps: st.reps, rir: st.rir }, U(), blk.loadType);
-    if (adj && adj.nextWeight && blk.sets[si + 1] && blk.sets[si + 1].weight != null) blk.sets[si + 1].weight = adj.nextWeight;
+    steer(bi, si);
   }
   renderWorkout();
+}
+// Set-to-set: what you just did re-sets the weight (or reps) for every set still to come.
+function steer(bi, si) {
+  const a = store.get().active; if (!a) return;
+  const res = engine.adjustAfterSet(a.entries[bi], si, U());
+  if (!res || !res.changes.length) return;
+  store.patchActive((x) => {
+    for (const c of res.changes) {
+      const t = x.entries[bi].sets[c.si];
+      if (c.weight != null) t.weight = c.weight;
+      if (c.reps != null) t.reps = c.reps;
+      t.adj = c.adj;
+    }
+  });
+  if (res.message) toast(res.message);
 }
 // Did more sets than prescribed? Log them — the new set copies the last one's numbers.
 function addSet(bi) {
   store.patchActive((x) => {
     const e = x.entries[bi]; const last = e && e.sets[e.sets.length - 1]; if (!last) return;
-    e.sets.push({ ...last, idx: e.sets.length, kind: last.kind === 'top' ? 'backoff' : last.kind, done: false, rir: null, rpe: null });
+    e.sets.push({ ...last, idx: e.sets.length, kind: last.kind === 'top' ? 'backoff' : last.kind, done: false, rir: null, rpe: null, adj: null });
   });
   renderWorkout();
 }
@@ -1142,9 +1182,8 @@ function setRir(bi, si, val) {
   const a = store.get().active; if (!a) return;
   const blk = a.entries[bi]; const st = blk.sets[si];
   st.rir = st.rir === val ? null : val;
-  // re-run set-to-set nudge now that actual reps-in-reserve is known
-  if (st.rir != null) { const adj = engine.adjustAfterSet(st, { reps: st.reps, rir: st.rir }, U(), blk.loadType); if (adj && adj.nextWeight && blk.sets[si + 1] && blk.sets[si + 1].weight != null) blk.sets[si + 1].weight = adj.nextWeight; }
   store.patchActive(() => {});
+  steer(bi, si); // re-steer now that reps-in-reserve is known
   renderWorkout();
 }
 function doSwap(bi, exId) {
@@ -1212,8 +1251,9 @@ function finishSave() {
     absWeek: a.absWeek, sessionInWeek: a.sessionInWeek, dayKey: a.dayKey, dayName: a.dayName,
     optional: a.optional, free: a.free || null, sessionRPE: srpe, durationMin, tweaks: a.tweakAreas || [],
     entries: a.entries.map((e) => ({
-      exerciseId: e.exerciseId, name: e.name,
-      sets: e.sets.map((s) => ({ weight: s.weight ?? null, reps: s.reps ?? null, seconds: s.seconds ?? null, rir: s.rir ?? null, rpe: s.rpe ?? null, targetRir: s.targetRir ?? null, kind: s.kind, done: s.done })),
+      exerciseId: e.exerciseId, name: e.name, caution: !!e.caution,
+      sets: e.sets.map((s) => ({ weight: s.weight ?? null, reps: s.reps ?? null, seconds: s.seconds ?? null, rir: s.rir ?? null, rpe: s.rpe ?? null,
+        targetRir: s.targetRir ?? null, targetReps: s.targetReps ?? null, planWeight: s.planWeight ?? null, kind: s.kind, done: s.done })),
       resultSeconds: e.resultSeconds || null, resultRounds: e.resultRounds || null, topWeight: e.topWeight || null,
     })),
   };

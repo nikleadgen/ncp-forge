@@ -300,3 +300,15 @@ details summary{cursor:pointer}
 .pick-foot > button{flex:none}
 .pick-tray .tray-chip{flex:0 1 auto}
 .tweakchips .chip{flex:1 0 auto}
+.tray-chip.reorder{border-color:var(--accent2);color:var(--accent2)}
+.pick-order-sub{margin:-4px 0 10px}
+.order-row{cursor:default}
+.order-row .pick-mid{flex:1}
+.order-btns{display:flex;gap:6px;flex:none}
+.ord-btn{width:40px;height:40px;border-radius:10px;background:var(--bg2);border:1px solid var(--line);font-size:18px;font-weight:800;color:var(--txt)}
+.ord-btn:disabled{opacity:.3}
+.ord-btn.x{color:var(--muted);font-size:15px}
+.set-tag{position:relative}
+.adj{position:absolute;top:-6px;right:-6px;font-size:12px;font-weight:900;border-radius:7px;padding:0 4px;line-height:16px}
+.adj.up{background:var(--accent);color:#08220f}
+.adj.down{background:#fb923c;color:#2a1302}

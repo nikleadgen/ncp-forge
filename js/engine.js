@@ -2,10 +2,10 @@
 // the caller persists). Turns the plan into concrete prescriptions and learns from logs.
 //
 // Four loops of adjustment (per the brief):
-//   set-to-set   → adjustAfterSet(): RPE off target nudges the next set's load
+//   set-to-set   → adjustAfterSet(): reps done + reps left vs the plan re-sets every set still to come
 //   session      → readinessScale(): today's 5-tap check scales load + volume
 //   week         → computeACWR(): acute:chronic workload guards against doing too much
-//   cycle        → ingestModel(): logged PRs raise the working maxes that drive future loads
+//   cycle        → ingestModel(): logged sets move the working maxes (up on a best set, down on evidence)
 //
 // All numbers trace to docs/PROGRAM-SCIENCE.md.
 
@@ -676,43 +676,104 @@ function resolveRun(base, sc, c, ex) {
 }
 
 // ---------- set-to-set adjustment ----------
-export function adjustAfterSet(set, actual, units = 'lb', loadType = 'barbell') {
-  if (!set || set.weight == null || actual == null) return null;
-  const targetRir = set.targetRir != null ? set.targetRir : 2;
-  let rir = actual.rir;
-  if (rir == null && actual.rpe != null) rir = Math.max(0, 10 - actual.rpe);
-  if (rir == null) return null;
-  // fewer reps left than planned => too heavy; clearly more left => too light
-  if (rir <= targetRir - 2) {
-    const next = roundLoad(set.weight * 0.93, loadType, units);
-    return { nextWeight: next, message: `Tougher than planned — ${next}${units} next set.` };
+// How hard a logged set really was, in reps left. Your RIR tap wins. Without one: fell short of
+// the target reps → you ran out (0 left); hit the target → assume you left what was planned.
+export function effectiveRir(st) {
+  if (st.rir != null) return st.rir;
+  if (st.rpe != null) return Math.max(0, 10 - st.rpe);
+  if (st.targetReps != null && st.reps != null && st.reps < st.targetReps) return 0;
+  return st.targetRir != null ? st.targetRir : 1;
+}
+
+const STEER_KINDS = new Set(['work', 'top', 'backoff']); // max-effort, speed and test sets have no target to steer to
+// Every logged set is a fresh read on today's strength. Reps done + reps left = what you could have
+// done at that weight; compare it with the plan (target reps + target RIR). Within ±1 rep that's
+// noise in the RIR call → stay at the weight you just used. Beyond it, re-derive today's e1RM from
+// the set and re-prescribe EVERY set still to come — heavier if you had more in the tank, lighter
+// if you fell short. Bodyweight lifts can't change load, so they move the rep target. (§4)
+// Pure: returns { changes: [{ si, weight?, reps?, adj }], message } for the caller to apply.
+export function adjustAfterSet(entry, si, units = 'lb') {
+  const st = entry && entry.sets[si];
+  if (!st || !st.done || !st.reps || !STEER_KINDS.has(st.kind)) return null;
+  const rest = entry.sets.map((x, j) => ({ x, j })).filter(({ x, j }) => j > si && !x.done);
+  if (!rest.length) return null;
+  const tReps = st.targetReps != null ? st.targetReps : st.reps;
+  const tRir = st.targetRir != null ? st.targetRir : 2;
+  const rir = effectiveRir(st);
+  const gap = (st.reps + rir) - (tReps + tRir);   // + = more in the tank than planned
+  const dir = gap >= 2 ? 'up' : gap <= -2 ? 'down' : null;
+  const short = st.reps < tReps ? `${st.reps} of ${tReps} reps` : 'Harder than planned';
+  const changes = [];
+
+  if (entry.loadType === 'bodyweight' || !st.weight) {
+    if (!dir) return { changes, message: '' };
+    // aim to leave ~2 in the tank, never more than +2 reps or fewer than one under what you just did
+    const next = Math.max(1, Math.min(st.reps + 2, Math.max(st.reps + rir - 2, st.reps - 1)));
+    for (const { x, j } of rest) if (x.reps != null && x.reps !== next) changes.push({ si: j, reps: next, adj: dir });
+    const msg = dir === 'up' ? `More in the tank — aim for ${next} next set.` : `${short} — aim for ${next} next set.`;
+    return { changes, message: changes.length ? msg : '' };
   }
-  if (rir >= targetRir + 2 && (actual.reps == null || actual.reps >= set.reps)) {
-    const next = roundLoad(set.weight * 1.04, loadType, units);
-    return { nextWeight: next, message: `Plenty left — bump to ${next}${units}.` };
+
+  const dayE1rm = e1rmFromSet(st.weight, st.reps, rir);
+  const straight = (x) => (x.targetReps != null ? x.targetReps : x.reps) === tReps && (x.targetRir != null ? x.targetRir : tRir) === tRir;
+  for (const { x, j } of rest) {
+    if (x.weight == null) continue;
+    let w;
+    if (!dir) {
+      if (!straight(x)) continue;       // on target: a planned back-off stays a back-off
+      w = st.weight;                    // on target: stay at what you just used
+    } else if (straight(x)) {
+      w = loadForReps(dayE1rm, tReps, tRir);
+    } else {                            // e.g. back-offs after a top set: keep the planned ratio
+      w = loadForReps(dayE1rm, tReps, tRir) * ((x.planWeight || x.weight) / (st.planWeight || st.weight));
+    }
+    w = roundLoad(w, entry.loadType, units);
+    if (w && w !== x.weight) changes.push({ si: j, weight: w, adj: dir || (w > x.weight ? 'up' : 'down') });
   }
-  return null;
+  if (!changes.length) return { changes, message: '' };
+  const w = changes[0].weight;
+  const msg = dir === 'up' ? `More in the tank — next set ${w}${units}.`
+    : dir === 'down' ? `${short} — next set ${w}${units}.`
+    : `On target — stay at ${w}${units}.`;
+  return { changes, message: msg };
 }
 
 // ---------- ingest a finished session → updated maxes (cycle loop) ----------
+// Up: the best set of the day raises the max (capped +15%/session against a fluke).
+// Down: only on real evidence that you're weaker than the model — sets where you logged your RIR or
+// fell short of the target — and only when even your best set came in >5% under what the
+// prescription predicted. Measured against the prescription, so a readiness-trimmed day, a deload
+// or a niggle-lightened lift done as written never counts as a drop. It moves a third of the gap:
+// one bad day barely dents it; a real layoff converges in two or three sessions. (§4)
+const DROP_BELOW = 0.95, DROP_SHARE = 1 / 3;
 export function ingestModel(state, session) {
   const patch = {};
   const now = session.dateISO || new Date().toISOString();
+  const stored = (exId, k) => (state.maxes[exId] && state.maxes[exId][k]) || 0;
+  const best = (exId, k) => (patch[exId] && patch[exId][k]) || stored(exId, k);
   const bumpE1RM = (exId, e1rm) => {
-    const cur = (state.maxes[exId] && state.maxes[exId].e1rm) || 0;
+    const cur = stored(exId, 'e1rm');
     const capped = cur ? Math.min(e1rm, cur * 1.15) : e1rm; // guard against a fluke spike
-    if (capped > cur) patch[exId] = { ...(state.maxes[exId] || {}), e1rm: Math.round(capped), updated: now };
+    if (Math.round(capped) > best(exId, 'e1rm')) patch[exId] = { ...(state.maxes[exId] || {}), e1rm: Math.round(capped), updated: now };
   };
   const bumpReps = (exId, reps) => {
-    const cur = (state.maxes[exId] && state.maxes[exId].maxReps) || 0;
-    if (reps > cur) patch[exId] = { ...(state.maxes[exId] || {}), maxReps: reps, updated: now };
+    if (reps > best(exId, 'maxReps')) patch[exId] = { ...(state.maxes[exId] || {}), maxReps: reps, updated: now };
   };
+  const vsPlan = {}; // exId → best performance ÷ prediction, over sets that can show a drop
   for (const entry of (session.entries || [])) {
     const ex = getExercise(entry.exerciseId);
     for (const st of (entry.sets || [])) {
       if (!st.done) continue;
-      const rir = st.rir != null ? st.rir : (st.rpe != null ? Math.max(0, 10 - st.rpe) : (st.targetRir != null ? st.targetRir : 1));
-      if ((ex.unit === 'weight') && st.weight && st.reps) bumpE1RM(entry.exerciseId, e1rmFromSet(st.weight, st.reps, rir));
+      const rir = effectiveRir(st);
+      if ((ex.unit === 'weight') && st.weight && st.reps) {
+        const e = e1rmFromSet(st.weight, st.reps, rir);
+        bumpE1RM(entry.exerciseId, e);
+        const planned = st.planWeight && st.targetReps ? e1rmFromSet(st.planWeight, st.targetReps, st.targetRir != null ? st.targetRir : 2) : 0;
+        const evidence = st.rir != null || st.reps < st.targetReps || st.weight >= st.planWeight;
+        if (planned && evidence && !entry.caution && STEER_KINDS.has(st.kind)) {
+          vsPlan[entry.exerciseId] = Math.max(vsPlan[entry.exerciseId] || 0, e / planned);
+        }
+      }
       if ((ex.unit === 'bw') && st.reps && (st.kind === 'amrap' || st.rpe == null || st.rpe >= 9)) bumpReps(entry.exerciseId, st.reps);
     }
     // 1-mile time trial result (seconds)
@@ -730,6 +791,11 @@ export function ingestModel(state, session) {
       const cur = (state.maxes.sandbag && state.maxes.sandbag.weight) || 0;
       if (entry.topWeight > cur) patch.sandbag = { ...(state.maxes.sandbag || {}), weight: entry.topWeight, updated: now };
     }
+  }
+  for (const exId of Object.keys(vsPlan)) {
+    const cur = stored(exId, 'e1rm');
+    if (!cur || patch[exId] || vsPlan[exId] >= DROP_BELOW) continue;
+    patch[exId] = { ...(state.maxes[exId] || {}), e1rm: Math.round(cur * (1 - (1 - vsPlan[exId]) * DROP_SHARE)), updated: now };
   }
   return patch;
 }

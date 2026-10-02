@@ -106,8 +106,16 @@ overreaching, which blunts the rebound
 
 Forge adjusts at four time-scales, exactly as you asked. Each is a published method.
 
-**Set-to-set — RPE / RIR.** Loads are prescribed as *reps-in-reserve*, and the app nudges the next
-set if your reported effort misses the target. RIR-based RPE is the validated autoregulation standard
+**Set-to-set — RPE / RIR.** Loads are prescribed as *reps-in-reserve*, and every logged set re-sets
+the ones still to come. Reps done + reps left is how many you could have done at that weight;
+compare it with the plan (target reps + target RIR). Within ±1 rep that's the normal error of an RIR
+call, so you stay at the weight you just used. Beyond it, the set gives today's e1RM (same reps-RIR →
+%1RM table) and every remaining set is re-prescribed from it — so missing reps, a grinder at RIR 0
+or a set with 5 left all move the load the right amount, not a fixed step, and set 3 is never
+left at the weight set 1 proved wrong. Without an RIR tap the reps decide: short of target counts
+as 0 left; hitting it assumes you left what was planned. Bodyweight lifts can't change load, so the
+rep target moves instead (toward ~2 in reserve, at most ±2 reps a set). RIR-based RPE is the
+validated autoregulation standard
 ([Zourdos et al. 2016](https://pubmed.ncbi.nlm.nih.gov/26049792/);
 [Helms et al., applying the RIR scale](https://journals.lww.com/nsca-scj/fulltext/2016/08000/application_of_the_repetitions_in_reserve_based.10.aspx)).
 Caveat baked into the plan: novices under-predict reps-to-failure, so early targets stay in the
@@ -124,9 +132,16 @@ has real statistical flaws, so Forge uses it to flag spikes, never as a sole vet
 ([Science for Sport](https://www.scienceforsport.com/acutechronic-workload-ratio/);
 [Impellizzeri et al., pitfalls](https://pubmed.ncbi.nlm.nih.gov/32502973/)).
 
-**Cycle — your real numbers.** Every logged top set updates the working maxes that drive future loads
-(estimated via the reps-RIR → %1RM relationship), so the plan literally gets heavier as you get
-stronger. Deloads are proactive (every ~4 weeks early, then 5–6) **and** reactive — triggered by a
+**Cycle — your real numbers.** Every logged set — program, Just Lift or Pick your lifts — feeds the
+same per-lift working maxes that drive all future loads (estimated via the reps-RIR → %1RM
+relationship), so the plan literally gets heavier as you get stronger. Your best set of the day
+raises a max (capped +15% a session against a fluke). It can also come *down*, but only on
+evidence: sets where you logged RIR or fell short of the target, and only when even your best set
+lands >5% under what the prescription predicted. Measuring against the prescription matters — a
+readiness-trimmed day, a deload or a niggle-lightened lift done as written never reads as a drop,
+and lifting lighter by choice isn't evidence of anything. A drop moves a third of the gap: one bad
+day barely dents the model, a genuine layoff converges in two or three sessions (on top of the
+re-entry damping in §8). Deloads are proactive (every ~4 weeks early, then 5–6) **and** reactive — triggered by a
 performance drop, sustained low readiness, or lingering pain
 ([Bell et al., a practical approach to deloading](https://shura.shu.ac.uk/35313/3/Bell-APracticalApproach(AM).pdf)).
 
