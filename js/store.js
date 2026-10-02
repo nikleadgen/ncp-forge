@@ -7,7 +7,7 @@ import { sessionPriority } from './program.js';
 
 const KEY = 'forge_state';
 export const SCHEMA_VERSION = 6;
-export const VERSION = '0.7.0'; // shown in Settings; bump on each deploy so updates are verifiable
+export const VERSION = '0.8.0'; // shown in Settings; bump on each deploy so updates are verifiable
 
 function defaultState() {
   return {

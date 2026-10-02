@@ -69,6 +69,8 @@ export const EXERCISES = {
     cues: ['Body in a plank', 'Chest to bar', 'Squeeze shoulder blades'], sub: ['db_row'], demo: 'inverted row' },
   face_pull: { name: 'Cable Face Pull', load: 'cable', unit: 'weight', pattern: 'hpull',
     cues: ['Pull to forehead', 'Thumbs back', 'Healthy shoulders'], sub: ['band_face_pull'], demo: 'cable face pull' },
+  db_shrug: { name: 'DB Shrug', load: 'dumbbell', unit: 'weight', pattern: 'traps',
+    cues: ['Straight up to the ears', 'Pause at the top', 'No rolling'], sub: [], demo: 'dumbbell shrug' },
 
   // ---------- Horizontal push (push-ups = qualifier + metcon movement) ----------
   push_up: { name: 'Push-Up', load: 'bodyweight', unit: 'bw', pattern: 'hpush',
@@ -83,6 +85,8 @@ export const EXERCISES = {
     cues: ['Wrists stacked', 'Lower under control', 'Press to lockout'], sub: ['db_floor_press'], demo: 'dumbbell bench press' },
   db_floor_press: { name: 'DB Floor Press', load: 'dumbbell', unit: 'weight', pattern: 'hpush',
     cues: ['Triceps touch floor', 'Pause', 'Press up'], sub: ['push_up'], demo: 'dumbbell floor press' },
+  db_incline_press: { name: 'DB Incline Press', load: 'dumbbell', unit: 'weight', pattern: 'hpush',
+    cues: ['Bench ~30°', 'Elbows under wrists', 'Press up and slightly back'], sub: ['db_bench_press'], demo: 'incline dumbbell press' },
 
   // ---------- Vertical push ----------
   overhead_press: { name: 'Overhead Press', load: 'barbell', unit: 'weight', pattern: 'vpush',
@@ -93,6 +97,12 @@ export const EXERCISES = {
     cues: ['Ribs down', 'Press to lockout', 'Control the lower'], sub: ['overhead_press'], demo: 'dumbbell shoulder press' },
   db_push_press: { name: 'DB Push Press', load: 'dumbbell', unit: 'weight', pattern: 'vpush',
     cues: ['Dip-drive', 'Catch overhead', 'Stand tall'], sub: ['push_press'], demo: 'dumbbell push press' },
+
+  // ---------- Delts (isolation) ----------
+  db_lateral_raise: { name: 'DB Lateral Raise', load: 'dumbbell', unit: 'weight', pattern: 'delts',
+    cues: ['Lead with the elbows', 'Stop at shoulder height', 'Slow on the way down'], sub: ['db_rear_delt_fly'], demo: 'dumbbell lateral raise' },
+  db_rear_delt_fly: { name: 'DB Rear-Delt Fly', load: 'dumbbell', unit: 'weight', pattern: 'delts',
+    cues: ['Hinge over, flat back', 'Sweep wide, pinkies up', 'No shrugging'], sub: ['face_pull'], demo: 'dumbbell rear delt fly' },
 
   // ---------- Odd-object / strongman (the sandbag ladder) ----------
   sandbag_shoulder: { name: 'Sandbag Shoulder', load: 'sandbag', unit: 'weight', pattern: 'strongman',
@@ -141,6 +151,10 @@ export const EXERCISES = {
     cues: ['Elbows pinned', 'No swing', 'Squeeze top'], sub: ['db_curl'], demo: 'ez bar curl' },
   db_curl: { name: 'DB Curl', load: 'dumbbell', unit: 'weight', pattern: 'arms',
     cues: ['Supinate', 'Slow eccentric', 'No momentum'], sub: ['ez_curl'], demo: 'dumbbell curl' },
+  db_hammer_curl: { name: 'DB Hammer Curl', load: 'dumbbell', unit: 'weight', pattern: 'arms',
+    cues: ['Thumbs up', 'Elbows pinned', 'Squeeze, slow down'], sub: ['db_curl'], demo: 'dumbbell hammer curl' },
+  db_overhead_tricep_ext: { name: 'DB Overhead Triceps Ext.', load: 'dumbbell', unit: 'weight', pattern: 'arms',
+    cues: ['One DB, both hands', 'Elbows point up', 'Deep stretch, full lockout'], sub: ['tricep_pushdown'], demo: 'dumbbell overhead tricep extension' },
   tricep_pushdown: { name: 'Triceps Pushdown', load: 'cable', unit: 'weight', pattern: 'arms',
     cues: ['Elbows tight', 'Full lockout', 'Control up'], sub: ['db_floor_press'], demo: 'cable triceps pushdown' },
   band_face_pull: { name: 'Band Face Pull', load: 'none', unit: 'bw', pattern: 'hpull',
@@ -182,6 +196,25 @@ export const EXERCISES = {
   field_metcon: { name: 'Field Metcon (event sim)', load: 'none', unit: 'bw', pattern: 'metcon',
     cues: ['5 rounds down ~100yd', 'HR push-ups + walking lunges + air squats', 'Sprint the finish'], sub: [], demo: 'crossfit chipper field workout' },
 };
+
+// "Pick your lifts" menu — the library grouped the way people name a gym day. A lift can sit in
+// more than one group (deadlift is a back AND a leg lift). Runs, mobility and benchmarks aren't
+// here: this is for lifting.
+export const PICK_GROUPS = [
+  { id: 'back', name: 'Back', ex: ['pull_up', 'chin_up', 'lat_pulldown', 'barbell_row', 'db_row', 'cable_row', 'inverted_row',
+    'deadlift', 'db_shrug', 'face_pull', 'db_rear_delt_fly', 'band_pull_up', 'negative_pull_up'] },
+  { id: 'shoulders', name: 'Shoulders', ex: ['overhead_press', 'db_shoulder_press', 'push_press', 'db_push_press',
+    'db_lateral_raise', 'db_rear_delt_fly', 'face_pull', 'db_shrug', 'band_face_pull'] },
+  { id: 'chest', name: 'Chest', ex: ['bench_press', 'db_bench_press', 'db_incline_press', 'db_floor_press', 'push_up',
+    'hand_release_push_up', 'incline_push_up'] },
+  { id: 'legs', name: 'Legs', ex: ['back_squat', 'front_squat', 'goblet_squat', 'deadlift', 'trap_bar_deadlift', 'romanian_deadlift',
+    'db_rdl', 'hip_thrust', 'db_hip_thrust', 'bulgarian_split_squat', 'db_reverse_lunge', 'walking_lunge', 'db_step_up'] },
+  { id: 'arms', name: 'Arms', ex: ['ez_curl', 'db_curl', 'db_hammer_curl', 'tricep_pushdown', 'db_overhead_tricep_ext'] },
+  { id: 'core', name: 'Core', ex: ['hanging_leg_raise', 'ab_wheel', 'plank', 'hollow_hold', 'suitcase_carry'] },
+  { id: 'carry', name: 'Carry & Grip', ex: ['farmer_carry', 'suitcase_carry', 'dead_hang', 'sandbag_carry'] },
+  { id: 'power', name: 'Power', ex: ['kb_swing', 'kb_clean', 'db_snatch', 'box_jump', 'broad_jump',
+    'sandbag_shoulder', 'sandbag_clean', 'sandbag_zercher'] },
+];
 
 export function getExercise(id) {
   return EXERCISES[id] || { name: id, load: 'none', unit: 'weight', pattern: 'other', cues: [], sub: [] };

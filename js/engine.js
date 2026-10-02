@@ -9,7 +9,7 @@
 //
 // All numbers trace to docs/PROGRAM-SCIENCE.md.
 
-import { getExercise, EXERCISES } from './exercises.js';
+import { getExercise, EXERCISES, PICK_GROUPS } from './exercises.js';
 import { planContext, getSession, getDay, COMMON_DAYS, dateForWeek, MACRO, LIFT_FLAVORS, liftFocus } from './program.js';
 
 // ---------- equipment routing (proxy lifts you can't yet load) ----------
@@ -27,10 +27,11 @@ export function sandbagReady(state) { return !!(state && state.settings && state
 
 // Resolve a planned exercise to what the athlete actually does today: their saved swap
 // preference wins, then equipment routing. Returns { id, proxied } (proxied = sandbag→gear).
-function routeExercise(state, baseEx) {
+// `exact` = the athlete hand-picked this lift, so a standing swap for the plan doesn't apply.
+function routeExercise(state, baseEx, exact = false) {
   const prefs = (state && state.settings && state.settings.exPrefs) || {};
   let id = baseEx, proxied = false;
-  if (prefs[baseEx] && EXERCISES[prefs[baseEx]]) id = prefs[baseEx];
+  if (!exact && prefs[baseEx] && EXERCISES[prefs[baseEx]]) id = prefs[baseEx];
   if (getExercise(id).load === 'sandbag' && !sandbagReady(state) && SANDBAG_PROXY[id]) { id = SANDBAG_PROXY[id]; proxied = true; }
   return { id, proxied };
 }
@@ -108,6 +109,8 @@ const E1RM_MULT = {
   db_curl: 0.12, db_hip_thrust: 0.4, kb_swing: 0.25, db_snatch: 0.18, kb_clean: 0.25, db_push_press: 0.22,
   farmer_carry: 0.45, lat_pulldown: 0.6, cable_row: 0.5, face_pull: 0.2, tricep_pushdown: 0.25,
   sandbag_shoulder: 0.5, sandbag_clean: 0.5, sandbag_zercher: 0.55, sandbag_carry: 0.55, suitcase_carry: 0.4,
+  db_lateral_raise: 0.1, db_rear_delt_fly: 0.08, db_shrug: 0.45, db_incline_press: 0.25, db_hammer_curl: 0.14,
+  db_overhead_tricep_ext: 0.2,
 };
 const DEFAULT_REPS_MAX = { pull_up: 3, chin_up: 4, push_up: 15, hand_release_push_up: 12, air_squat: 40,
   inverted_row: 10, hanging_leg_raise: 8, ab_wheel: 6 };
@@ -273,7 +276,7 @@ function intervalTarget(state, repDist) {
 
 // ---------- injury / niggle routing ----------
 // Which body areas each movement loads. Specific overrides first, else by movement pattern.
-const PATTERN_AREAS = { hinge: ['back'], 'power-hinge': ['back'], squat: ['knee'], lunge: ['knee'], vpush: ['shoulder'], hpush: ['shoulder', 'elbow'], vpull: ['shoulder', 'elbow'], hpull: ['shoulder'], strongman: ['back', 'shoulder'], carry: ['back'], power: ['knee'], arms: ['elbow'], aerobic: ['knee', 'ankle'], anaerobic: ['knee', 'ankle'], speed: ['knee', 'ankle'], core: [], mobility: [], grip: [], fullbody: [], test: [], other: [] };
+const PATTERN_AREAS = { hinge: ['back'], 'power-hinge': ['back'], squat: ['knee'], lunge: ['knee'], vpush: ['shoulder'], hpush: ['shoulder', 'elbow'], vpull: ['shoulder', 'elbow'], hpull: ['shoulder'], delts: ['shoulder'], traps: [], strongman: ['back', 'shoulder'], carry: ['back'], power: ['knee'], arms: ['elbow'], aerobic: ['knee', 'ankle'], anaerobic: ['knee', 'ankle'], speed: ['knee', 'ankle'], core: [], mobility: [], grip: [], fullbody: [], test: [], other: [] };
 const EXERCISE_AREAS = { deadlift: ['back'], trap_bar_deadlift: ['back'], romanian_deadlift: ['back'], db_rdl: ['back'], back_squat: ['knee', 'back'], front_squat: ['knee', 'back'], hip_thrust: ['back'], barbell_row: ['back', 'shoulder'], bench_press: ['shoulder', 'elbow'], db_bench_press: ['shoulder', 'elbow'], db_floor_press: ['shoulder', 'elbow'], box_jump: ['knee', 'ankle'], broad_jump: ['knee', 'ankle'], sprints: ['knee', 'ankle', 'hamstring'], run_walk: ['knee', 'ankle'], run_easy: ['knee', 'ankle'], run_tempo: ['knee', 'ankle'], run_intervals_400: ['knee', 'ankle'], run_intervals_800: ['knee', 'ankle'], strides: ['knee', 'ankle'], mile_time_trial: ['knee', 'ankle'], bike_z2: [], ruck: ['back'] };
 export function areasFor(exId) { if (EXERCISE_AREAS[exId]) return EXERCISE_AREAS[exId]; return PATTERN_AREAS[getExercise(exId).pattern] || []; }
 function intersects(arr, set) { return arr.some((a) => set.has(a)); }
@@ -372,6 +375,98 @@ export function buildLiftDay(state, focusId, variant = 0) {
   return { focus, flavor, layoff, day: { name: `${focus.name} · ${flavor.label}`, tag: 'strength', free: focus.id, slots } };
 }
 
+// ================= PICK YOUR LIFTS — you choose the lifts, the engine sets the numbers =================
+// For the days there's no time for a whole session: pick exactly the lifts you'll do, log weight ×
+// reps, done. Each lift keeps the reps and set count you used for it last time (your habit), and
+// the load comes off the same e1RM model as everything else, so it climbs as your logs do.
+// No warm-up block, no rotation — just your list. Rationale: PROGRAM-SCIENCE §8b.
+const PICK_REPS = { barbell: 8, dumbbell: 10, cable: 12 };   // first-time defaults ≈ Just Lift's Volume day
+
+const shortDate = (iso) => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+// Every set you logged for a lift in its most recent session.
+export function lastPerformance(state, exId) {
+  const h = (state.history && state.history[exId]) || [];
+  if (!h.length) return null;
+  let last = h[0];
+  for (const x of h) if (x.dateISO > last.dateISO) last = x;
+  return { dateISO: last.dateISO, sets: h.filter((x) => x.dateISO === last.dateISO) };
+}
+
+// "3×8 @ 135lb" when every set matched, otherwise each set — the line you'd write in a notebook.
+export function lastSummary(state, exId) {
+  const lp = lastPerformance(state, exId);
+  const sets = lp ? lp.sets.filter((x) => x.reps) : [];
+  if (!sets.length) return null; // holds and carries log no reps — nothing worth echoing
+  const units = (state.settings && state.settings.units) || 'lb';
+  const same = sets.every((x) => x.reps === sets[0].reps && x.weight === sets[0].weight);
+  const text = same
+    ? `${sets.length}×${sets[0].reps}` + (sets[0].weight ? ` @ ${sets[0].weight}${units}` : '')
+    : sets.map((x) => (x.weight ? `${x.weight}×${x.reps}` : `${x.reps}`)).join(', ');
+  return { dateISO: lp.dateISO, date: shortDate(lp.dateISO), text };
+}
+
+function pickScheme(state, exId) {
+  const ex = getExercise(exId);
+  if (ex.unit === 'time') return { t: 'hold', sets: 3, seconds: 40, rest: 60 };
+  if (ex.unit === 'dist') return { t: 'carry', sets: 3, dist: 40, rest: 90, loadPct: 0.6 };
+  const lp = lastPerformance(state, exId);
+  const prev = lp ? lp.sets.filter((x) => x.reps) : [];
+  const sets = prev.length ? Math.max(2, Math.min(5, prev.length)) : 3;
+  if (ex.unit === 'bw') return { t: 'bwreps', sets, reps: 'sub', pctMax: 0.75, rest: 90 };
+  // a test single or a heavy top triple isn't a habit — keep the echo in a working-set range
+  const reps = prev.length ? Math.max(5, Math.min(15, prev[0].reps))
+    : (ex.pattern === 'arms' || ex.pattern === 'delts') ? 12 : (PICK_REPS[ex.load] || 10);
+  const rest = reps <= 5 ? 180 : reps <= 8 ? 150 : reps <= 12 ? 105 : 75;
+  return { t: 'strength', sets, reps, rir: 2, rest, prog: 'load' };
+}
+
+// Name the day from what's in it: each lift counts toward the group most of the list shares, so
+// pull-ups + rows + face pulls reads "Back", not "Back + Shoulders".
+export function pickDayName(ids) {
+  const groupsOf = (id) => PICK_GROUPS.filter((g) => g.ex.includes(id)).map((g) => g.id);
+  const count = {};
+  for (const id of ids) for (const g of groupsOf(id)) count[g] = (count[g] || 0) + 1;
+  const named = [];
+  for (const id of ids) {
+    const gs = groupsOf(id);
+    if (!gs.length) continue;
+    const best = gs.reduce((a, b) => (count[b] > count[a] ? b : a));
+    if (!named.includes(best)) named.push(best);
+  }
+  if (!named.length) return 'Your Lifts';
+  if (named.length > 3) return 'Full Body';
+  return named.map((g) => PICK_GROUPS.find((x) => x.id === g).name).join(' + ');
+}
+
+// The menu, limited to what you can actually do today: no pull-up bar → no bar work; sandbag
+// lifts only once a loaded bag is ready.
+export function pickMenu(state) {
+  const profile = state.profile || {};
+  const ok = (id) => EXERCISES[id] && gearOk(state, id, profile) && (getExercise(id).load !== 'sandbag' || sandbagReady(state));
+  return PICK_GROUPS.map((g) => ({ id: g.id, name: g.name, ex: g.ex.filter(ok) }));
+}
+
+// Your most recent pick-your-lifts day — the "same again" shortcut on Home. Only lifts you
+// actually logged come back, and the label is named from those.
+export function lastPick(state) {
+  const all = (state.sessions || []).filter((x) => x.free === 'pick');
+  if (!all.length) return null;
+  const last = all.reduce((a, b) => (b.dateISO > a.dateISO ? b : a));
+  const ids = (last.entries || []).filter((e) => (e.sets || []).some((st) => st.done)).map((e) => e.exerciseId);
+  return ids.length ? { dateISO: last.dateISO, date: shortDate(last.dateISO), name: pickDayName(ids), ids } : null;
+}
+
+export function buildPickDay(state, exIds) {
+  const ids = [...new Set(exIds)].filter((id) => EXERCISES[id]);
+  const slots = ids.map((exId) => {
+    const ls = lastSummary(state, exId);
+    return { id: 'pick:' + exId, ex: exId, exact: true, scheme: pickScheme(state, exId),
+      note: ls ? `Last time (${ls.date}): ${ls.text}` : '' };
+  });
+  return { name: pickDayName(ids), tag: 'strength', free: 'pick', noWarmup: true, slots };
+}
+
 // ================= resolve a session into concrete prescriptions =================
 export function resolveSessionAt(state, absWeek, sessionInWeek, opts = {}) {
   const profile = state.profile;
@@ -392,7 +487,7 @@ export function resolveSessionAt(state, absWeek, sessionInWeek, opts = {}) {
 
   const slots = [];
   // prepend a warm-up on every primary/test session (not on pure optional aerobic)
-  if (!opts.optionalDayKey) slots.push(COMMON_DAYS.warmup.slots[0]);
+  if (!opts.optionalDayKey && !day.noWarmup) slots.push(COMMON_DAYS.warmup.slots[0]);
   for (const s of (day.slots || [])) slots.push(s);
 
   const excluded = excludedAreas(state);
@@ -436,7 +531,7 @@ function resolveSlot(slot, c) {
   // a forced exercise (an explicit in-workout swap) skips pref/equipment routing; otherwise route.
   let exId, proxied = false;
   if (c.forcedEx) exId = c.forcedEx;
-  else { const r = routeExercise(c.state, baseEx); exId = r.id; proxied = r.proxied; }
+  else { const r = routeExercise(c.state, baseEx, slot.exact); exId = r.id; proxied = r.proxied; }
   let ex = getExercise(exId);
   const proxyNote = proxied ? `No loaded sandbag yet — doing this as ${ex.name}.` : '';
   // route around flagged niggles: substitute to a safe alternative, else lighten + caution

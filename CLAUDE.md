@@ -50,12 +50,15 @@ adjusting the plan set-to-set (RPE/RIR), session-to-session (daily readiness), w
 ACWR), and cycle-to-cycle (measured progress). Use is meant to be near-thoughtless: open → today's
 workout → log a number → done.
 
-**Two ways to train (both go through the same engine):**
+**Three ways to train (all go through the same engine):**
 1. **The program** — the 52-week periodized macrocycle in `js/program.js` (`PHASES`). The pointer
    advances by *completed sessions*, never the calendar.
 2. **Just Lift** — an on-demand lift day (legs/push/pull/upper/full) built by `engine.buildLiftDay()`
    from the `LIFT_FOCUS` / `LIFT_FLAVORS` templates in `program.js`. Rationale in PROGRAM-SCIENCE §8.
    **Free lifts never advance the program pointer** — they log via `store.logExtraSession()`.
+3. **Pick your lifts** — the athlete chooses the exact lifts (from `PICK_GROUPS` in `exercises.js`);
+   `engine.buildPickDay()` only sets the numbers (last-session reps/sets, e1RM load). Logs as
+   `free: 'pick'`, also via `logExtraSession()`. Rationale in PROGRAM-SCIENCE §8b.
 
 **Primary goals (priority order):**
 - Take the operator from detrained → **top-30 online qualifier → podium at the in-person finals**.

@@ -13,6 +13,7 @@ const onb = {};            // onboarding scratch
 let rest = { id: null, endAt: 0, dur: 0 };
 const previewOpen = new Set(); // week-board session indices whose exercise preview is expanded
 let freePick = null;           // Just Lift: { focus, variant } — the day being previewed on Home
+let pick = { tab: 'back', ids: [], add: false }; // Pick your lifts: open group tab, chosen lifts in order, add-to-workout mode
 
 const U = () => (store.get().settings.units || 'lb');
 const esc = (s) => String(s == null ? '' : s).replace(/[<>&"]/g, (m) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[m]));
@@ -31,6 +32,7 @@ export function render() {
   const s = store.get();
   if (!s.profile) { document.body.dataset.route = 'onboarding'; return renderOnboarding(); }
   const hash = location.hash || '#/today';
+  if (hash.startsWith('#/pick')) { document.body.dataset.route = 'workout'; return renderPick(); }
   if (s.active && hash.startsWith('#/workout')) { document.body.dataset.route = 'workout'; return renderWorkout(); }
   document.body.dataset.route = 'app';
   setNav(hash);
@@ -185,8 +187,9 @@ function renderToday() {
 
       ${tweaks.length ? `<div class="tweak-banner">⚠ Training around your ${tweaks.map((t) => esc(engine.areaLabel(t.area))).join(', ')}. <a href="#/settings">manage</a></div>` : ''}
       ${layoffBannerHtml(s)}
-      ${readinessCard}
       ${resumeBarHtml(s)}
+      ${pickCardHtml(s)}
+      ${readinessCard}
       ${justLiftHtml(s)}
       ${weekBoardHtml(s)}
       ${calendarHtml(s)}
@@ -233,6 +236,98 @@ function resumeBarHtml(s) {
   if (!a || (!a.free && !a.optional)) return '';
   return `<button class="card resume-bar" data-act="goto" data-href="#/workout">
     <span class="resume-name">▶ Resume ${esc(a.dayName)}</span><span class="muted small">in progress</span></button>`;
+}
+
+// "Pick your lifts" — no time for a whole session: choose exactly what you'll do, log it, done.
+function pickCardHtml(s) {
+  const last = engine.lastPick(s);
+  const body = s.active
+    ? '<div class="muted small free-busy">Finish or pause your current session first.</div>'
+    : `<button class="btn-primary" data-act="pick-open">Pick lifts →</button>
+      ${last ? `<button class="btn-ghost wide pick-again" data-act="pick-repeat">↻ Same as ${esc(last.date)} · ${esc(last.name)}</button>` : ''}`;
+  return `<div class="card pickcard">
+    <div class="row between"><div class="lbl">Pick your lifts</div><div class="muted small">extra · doesn't touch the plan</div></div>
+    <div class="muted small wb-sub">Short on time? Choose the lifts you'll actually do — Forge fills in the weights, you log the reps. That's it.</div>
+    ${body}
+  </div>`;
+}
+
+// The picker: group tabs, tap lifts in the order you'll do them, Start. Also adds lifts to a
+// pick session already underway (pick.add).
+const LOAD_LABEL = { barbell: 'barbell', dumbbell: 'dumbbells', cable: 'cable', bodyweight: 'bodyweight', sandbag: 'sandbag', none: '' };
+function renderPick() {
+  const s = store.get();
+  // a pick session underway means you're adding to it; any other session has to finish first
+  pick.add = !!(s.active && s.active.free === 'pick');
+  const busy = !!(s.active && !pick.add);
+  const menu = engine.pickMenu(s);
+  if (!menu.some((g) => g.id === pick.tab)) pick.tab = menu[0].id;
+  const group = menu.find((g) => g.id === pick.tab);
+  const inWorkout = new Set(pick.add ? s.active.entries.map((e) => e.baseExId || e.exerciseId) : []);
+  const tabs = menu.map((g) => {
+    const n = g.ex.filter((id) => pick.ids.includes(id)).length;
+    return `<button class="focus-chip ${g.id === pick.tab ? 'sel' : ''}" data-act="pick-tab" data-g="${g.id}">${esc(g.name)}${n ? ` <span class="pick-badge">${n}</span>` : ''}</button>`;
+  }).join('');
+  const rows = group.ex.map((id) => {
+    const ex = getExercise(id);
+    const pos = pick.ids.indexOf(id);
+    const locked = inWorkout.has(id);
+    const last = engine.lastSummary(s, id);
+    const sub = locked ? 'already in this workout' : last ? `last ${last.text} · ${last.date}` : LOAD_LABEL[ex.load] || '';
+    return `<button class="pick-row ${pos >= 0 ? 'on' : ''} ${locked ? 'locked' : ''}" data-act="pick-toggle" data-ex="${id}" ${locked ? 'disabled' : ''}>
+      <span class="pick-num">${locked ? '✓' : pos >= 0 ? pos + 1 : '+'}</span>
+      <span class="pick-mid"><span class="pick-name">${esc(ex.name)}</span><span class="muted small">${esc(sub)}</span></span>
+    </button>`;
+  }).join('');
+  const n = pick.ids.length;
+  const tray = pick.ids.map((id, k) => `<button class="tray-chip" data-act="pick-toggle" data-ex="${id}">${k + 1} · ${esc(getExercise(id).name)} ✕</button>`).join('');
+  const go = pick.add ? `Add ${n} to workout →` : `Start · ${n} lift${n === 1 ? '' : 's'} →`;
+  root.innerHTML = `
+    <header class="wk-top">
+      <button class="icon-btn" data-act="pick-cancel">‹</button>
+      <div class="wk-title">${pick.add ? 'Add a lift' : 'Pick your lifts'}</div>
+      <span style="width:44px"></span>
+    </header>
+    <main class="wk-main pick-main">
+      <div class="focus-row pick-tabs">${tabs}</div>
+      <div class="pick-list">${rows || '<div class="muted small">Nothing in this group fits your gear.</div>'}</div>
+    </main>
+    <footer class="wk-foot pick-foot">
+      ${n ? `<div class="pick-tray">${tray}</div>` : ''}
+      ${busy ? '<div class="muted small">Finish or pause your current session first.</div>'
+        : `<button class="btn-primary" data-act="pick-start" ${n ? '' : 'disabled'}>${n ? go : 'Tap lifts to add them'}</button>`}
+    </footer>`;
+}
+function togglePick(id) {
+  const i = pick.ids.indexOf(id);
+  if (i >= 0) pick.ids.splice(i, 1); else pick.ids.push(id);
+  renderPick();
+}
+function pickStart() {
+  if (!pick.ids.length) return;
+  const ids = pick.ids.slice();
+  if (pick.add) return addPickedLifts(ids);
+  pick.ids = [];
+  startWorkout(null, null, null, ids);
+}
+// Append lifts to the pick session underway and jump to the first new one.
+function addPickedLifts(ids) {
+  const s = store.get(); const a = s.active;
+  pick.ids = []; pick.add = false;
+  if (!a) { location.hash = '#/today'; return; }
+  const have = a.entries.map((e) => e.baseExId || e.exerciseId);
+  const fresh = ids.filter((id) => !have.includes(id));
+  if (fresh.length) {
+    const day = engine.buildPickDay(s, fresh);
+    const res = engine.resolveSessionAt(s, a.absWeek, 0, { readiness: store.todayReadiness(), customDay: day });
+    store.patchActive((x) => {
+      x.cursor = x.entries.length;
+      x.entries.push(...res.blocks.map(entryFromBlock));
+      x.freeSlots = [...(x.freeSlots || []), ...day.slots];
+      x.dayName = engine.pickDayName([...have, ...fresh]);
+    });
+  }
+  location.hash = '#/workout';
 }
 
 // "Just lift" — pick a focus, get a whole session built from your numbers. Extra credit:
@@ -436,19 +531,19 @@ function entryFromBlock(b) {
     resultSeconds: null, resultRounds: null, topWeight: null, result: '',
   };
 }
-function buildActive(s, optionalDayKey, index, free) {
+function buildActive(s, optionalDayKey, index, free, pickIds) {
   const aw = s.program.absWeek;
   const rd = store.todayReadiness();
-  // Just Lift: the generated day travels WITH the active session (it isn't in the plan),
-  // so a mid-workout swap or a refresh can still find its slots.
-  if (free) {
-    const built = engine.buildLiftDay(s, free.focus, free.variant);
-    const res = engine.resolveSessionAt(s, aw, 0, { readiness: rd, customDay: built.day });
+  // Just Lift / Pick your lifts: the generated day travels WITH the active session (it isn't in
+  // the plan), so a mid-workout swap, an added lift or a refresh can still find its slots.
+  if (free || pickIds) {
+    const day = pickIds ? engine.buildPickDay(s, pickIds) : engine.buildLiftDay(s, free.focus, free.variant).day;
+    const res = engine.resolveSessionAt(s, aw, 0, { readiness: rd, customDay: day });
     return {
       startedAt: new Date().toISOString(), dateISO: new Date().toISOString(),
       absWeek: aw, sessionInWeek: null, dayKey: res.dayKey, dayName: res.dayName,
       dayTag: res.dayTag, isTest: false, optional: true, optionalDayKey: null,
-      free: built.focus.id, freeSlots: built.day.slots,
+      free: day.free, freeSlots: day.slots,
       readinessBand: res.readiness.band, cursor: 0, entries: res.blocks.map(entryFromBlock),
     };
   }
@@ -480,6 +575,7 @@ function renderWorkout() {
     <div class="wk-dots">${dots}</div>
     <main class="wk-main">
       ${renderBlock(b, i)}
+      ${a.free === 'pick' ? '<button class="btn-ghost wide add-lift" data-act="pick-add">＋ Add another lift</button>' : ''}
     </main>
     <div id="rest-bar" class="rest-bar ${rest.endAt ? 'show' : ''}">${renderRest()}</div>
     <footer class="wk-foot">
@@ -511,10 +607,13 @@ function renderBlock(b, bi) {
     ${b.detail ? `<div class="muted small">${esc(b.detail)}</div>` : ''}
     ${b.paceHint ? `<div class="hint">🏃 ${esc(b.paceHint)}</div>` : ''}
     ${body}
+    ${ADDSET_KINDS.includes(b.kind) && !b.isTest && b.sets.length ? `<button class="link-btn add-set" data-act="add-set" data-bi="${bi}">＋ Add a set</button>` : ''}
     ${swapControl(b, bi)}
     ${cues ? `<details class="cues"><summary>Form cues</summary><ul>${cues}</ul></details>` : ''}
   </div>`;
 }
+
+const ADDSET_KINDS = ['sets', 'reps', 'hold', 'carry'];
 
 // ---- in-workout exercise swap (e.g. floor press → bench press) ----
 const SWAPPABLE_KINDS = ['sets', 'reps', 'hold', 'carry', 'power', 'emom'];
@@ -542,6 +641,8 @@ function swappable(b) {
   return swapOptions(b).length > 0;
 }
 function swapControl(b, bi) {
+  const act = store.get().active;
+  if (act && act.free === 'pick') return ''; // you chose this lift — "Add another lift" covers a change of mind
   if (!swappable(b)) return '';
   const opts = swapOptions(b);
   const free = !!(store.get().active && store.get().active.free);
@@ -864,6 +965,20 @@ function onClick(e) {
     case 'free-pick': freePick = (freePick && freePick.focus === t.dataset.focus) ? null : { focus: t.dataset.focus, variant: 0 }; render(); break;
     case 'free-reroll': if (freePick) freePick.variant++; render(); break;
     case 'free-start': if (freePick) { const f = freePick; freePick = null; startWorkout(null, null, f); } break;
+    // pick your lifts
+    case 'pick-open': pick = { tab: pick.tab, ids: [], add: false }; location.hash = '#/pick'; scrollTo(0, 0); break;
+    case 'pick-repeat': {
+      const last = engine.lastPick(s);
+      const avail = new Set(engine.pickMenu(s).flatMap((g) => g.ex));
+      pick = { tab: pick.tab, ids: last ? last.ids.filter((id) => avail.has(id)) : [], add: false };
+      location.hash = '#/pick'; scrollTo(0, 0);
+      break;
+    }
+    case 'pick-add': pick = { tab: pick.tab, ids: [], add: true }; location.hash = '#/pick'; scrollTo(0, 0); break;
+    case 'pick-tab': pick.tab = t.dataset.g; renderPick(); scrollTo(0, 0); break;
+    case 'pick-toggle': togglePick(t.dataset.ex); break;
+    case 'pick-start': pickStart(); break;
+    case 'pick-cancel': { const back = pick.add ? '#/workout' : '#/today'; pick.ids = []; pick.add = false; location.hash = back; break; }
     case 'skip': store.skipSession(+t.dataset.idx); render(); toast("Skipped — it comes back around next week."); break;
     case 'unskip': store.unskipSession(+t.dataset.idx); render(); break;
     case 'toggle-preview': {
@@ -879,6 +994,7 @@ function onClick(e) {
     case 'inc': stepSet(t, +1); break;
     case 'dec': stepSet(t, -1); break;
     case 'logset': logSet(+t.dataset.bi, +t.dataset.si); break;
+    case 'add-set': addSet(+t.dataset.bi); break;
     case 'setrir': setRir(+t.dataset.bi, +t.dataset.si, +t.dataset.val); break;
     case 'do-swap': doSwap(+t.dataset.bi, t.dataset.ex); break;
     case 'next': moveCursor(+1); break;
@@ -980,10 +1096,10 @@ function saveReadiness() {
 function openReadiness() { f4(); render(); }
 function f4() { ['sleep', 'soreness', 'energy', 'stress', 'motivation'].forEach((k) => delete onb['rd_' + k]); store.update((s) => { const day = new Date().toISOString().slice(0, 10); s.readiness = s.readiness.filter((r) => r.dateISO.slice(0, 10) !== day); }); }
 
-function startWorkout(optionalDayKey, index, free) {
+function startWorkout(optionalDayKey, index, free, pickIds) {
   const s = store.get();
   if (s.active) { location.hash = '#/workout'; render(); return; } // finish or pause the current one first
-  const active = buildActive(s, optionalDayKey, index, free);
+  const active = buildActive(s, optionalDayKey, index, free, pickIds);
   store.startSession(active);
   location.hash = '#/workout';
   render();
@@ -1012,6 +1128,14 @@ function logSet(bi, si) {
     const adj = engine.adjustAfterSet(st, { reps: st.reps, rir: st.rir }, U(), blk.loadType);
     if (adj && adj.nextWeight && blk.sets[si + 1] && blk.sets[si + 1].weight != null) blk.sets[si + 1].weight = adj.nextWeight;
   }
+  renderWorkout();
+}
+// Did more sets than prescribed? Log them — the new set copies the last one's numbers.
+function addSet(bi) {
+  store.patchActive((x) => {
+    const e = x.entries[bi]; const last = e && e.sets[e.sets.length - 1]; if (!last) return;
+    e.sets.push({ ...last, idx: e.sets.length, kind: last.kind === 'top' ? 'backoff' : last.kind, done: false, rir: null, rpe: null });
+  });
   renderWorkout();
 }
 function setRir(bi, si, val) {
@@ -1070,7 +1194,7 @@ function finishPanel(a) {
   for (let v = 1; v <= 10; v++) chips += `<button class="rpe-chip big ${rpe === v ? 'sel' : ''}" data-act="finish-rpe" data-val="${v}">${v}</button>`;
   return `<header class="wk-top"><button class="icon-btn" data-act="finish-cancel">‹</button><div class="wk-title">Finish session</div><span style="width:44px"></span></header>
     <main class="wk-main finish-main">
-      <div class="finish-stat"><div><div class="big2">${logged}</div><div class="muted small">sets logged</div></div><div><div class="big2">${dur}m</div><div class="muted small">minutes</div></div><div><div class="big2">${esc(a.free ? '⚒︎' : a.optional ? '＋' : (a.sessionInWeek + 1) + '/4')}</div><div class="muted small">${a.free ? 'just lift' : a.optional ? 'bonus' : 'session'}</div></div></div>
+      <div class="finish-stat"><div><div class="big2">${logged}</div><div class="muted small">sets logged</div></div><div><div class="big2">${dur}m</div><div class="muted small">minutes</div></div><div><div class="big2">${esc(a.free === 'pick' ? '✎' : a.free ? '⚒︎' : a.optional ? '＋' : (a.sessionInWeek + 1) + '/4')}</div><div class="muted small">${a.free === 'pick' ? 'your lifts' : a.free ? 'just lift' : a.optional ? 'bonus' : 'session'}</div></div></div>
       <div class="lbl" style="margin-top:20px">How hard was that overall?</div>
       <div class="rpe-grid">${chips}</div>
       <div class="muted small">1 = easy · 7 = hard but solid · 10 = everything you had</div>
@@ -1106,7 +1230,8 @@ function finishSave() {
   rest.endAt = 0;
   location.hash = '#/today';
   render();
-  toast(a.free ? 'Logged. Every rep counts — your numbers just got sharper. 💪'
+  toast(a.free === 'pick' ? 'Logged. Short and done beats perfect and skipped. 💪'
+    : a.free ? 'Logged. Every rep counts — your numbers just got sharper. 💪'
     : a.isTest ? 'Test logged — maxes updated. 💪' : 'Session done. The plan just got smarter.');
 }
 

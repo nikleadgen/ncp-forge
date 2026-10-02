@@ -2,6 +2,22 @@
 
 All notable changes to Forge (NCP Games Trainer).
 
+## [0.8.0] — 2026-10-02 — Pick your lifts (user request)
+- **Pick your lifts** at the top of Home: choose exactly the lifts you'll do, by muscle group (Back,
+  Shoulders, Chest, Legs, Arms, Core, Carry & Grip, Power), in the order you'll do them, then Start.
+  Each lift shows what you did last time. No warm-up block, no rotation — just your list, through
+  the same one-lift-at-a-time workout screen. The day names itself from what's in it ("Back + Shoulders").
+- Weights are prefilled from your numbers (e1RM + readiness); reps and set count repeat your last
+  session of that lift; the card shows "Last time (Sep 28): 3×10 @ 60lb".
+- **＋ Add another lift** mid-session, and **↻ Same as last time** on Home re-picks the lifts you
+  actually logged last pick day.
+- **＋ Add a set** on any set-based lift, in every mode — log the extra set you actually did.
+- New lifts for a real shoulder/arm day: DB Lateral Raise, DB Rear-Delt Fly, DB Shrug, DB Incline
+  Press, DB Hammer Curl, DB Overhead Triceps Extension.
+- Logs as an extra session (never moves the 52-week pointer), like Just Lift. Finish-screen niggle
+  chips no longer squash ("Non", "Lowe back"). Science: PROGRAM-SCIENCE §8b.
+- No schema change — existing data loads as-is. SW cache → forge-v12.
+
 ## [0.7.0] — 2026-08-04 — Plate math + a week that matches real life (user request)
 - **Plate calculator** on every barbell set: `45 · 10 · 2.5 /side` under the weight, updating live as
   you step the load. Greedy from the heaviest plate (45/35/25/15/10/5/2.5/1.25), exact at every 5lb

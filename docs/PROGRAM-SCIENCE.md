@@ -240,6 +240,30 @@ never advance the week pointer, so the 52-week plan is exactly where you left it
 
 ---
 
+## 8b. "Pick your lifts" — the session you have time for
+
+Just Lift still hands you a whole session. On a short day the athlete trims it anyway — skips the
+accessories, swaps the lift that's taken too long — and the log ends up describing a session that
+didn't happen. **Pick your lifts** inverts it: you choose exactly what you'll do (by muscle group,
+in the order you'll do it), and Forge only fills in the numbers. Same principle as §8 — the session
+you finish beats the one you abandon — taken one step further.
+
+- **Reps and set count echo your last session of that lift** (reps clamped to 5–15, sets to 2–5,
+  so a heavy test single or top triple doesn't become a habit). First time on a lift: 8 reps for
+  barbell, 10 for dumbbell, 12 for cable/arms/delts, 3 sets at RIR 2 — Just Lift's Volume day.
+- **Load still comes off the e1RM model** (§4), with readiness, ACWR and re-entry damping applied —
+  so the prefill sits at or a touch above last time as your logs climb, which is the progressive
+  overload you'd otherwise have to remember. The last session is shown on the card so the number
+  is never a mystery.
+- **Flagged niggles still route** to a safe substitute or a lighter load (safety isn't optional
+  because you picked the lift). Standing swap preferences for the *program* don't apply — you
+  picked this exact lift.
+- **No warm-up block.** On a short day it's the first thing skipped; warm up into your first lift.
+- Like Just Lift, it logs as an extra session: history, maxes, charts and ACWR all update; the
+  52-week pointer never moves.
+
+---
+
 ## 9. Training the week you actually have
 
 A plan that demands four sessions from someone who trains twice doesn't produce four sessions — it
