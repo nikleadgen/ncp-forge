@@ -1,0 +1,10 @@
+// ncp-forge — Forge ↔ Muse bridge. Deploy: npx wrangler@4 deploy --config worker/wrangler.jsonc
+// Secrets (never in this file — the repo is public): WRITE_KEY, READ_KEY via `wrangler secret put`.
+{
+  "name": "ncp-forge",
+  "main": "index.js",
+  "compatibility_date": "2026-09-01",
+  "workers_dev": true,
+  "kv_namespaces": [{ "binding": "FORGE", "id": "cc62bd3c522c4ea7ba24aed6c1267559" }],
+  "observability": { "enabled": true }
+}

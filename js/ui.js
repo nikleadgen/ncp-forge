@@ -3,6 +3,7 @@
 
 import * as store from './store.js';
 import * as engine from './engine.js';
+import * as sync from './sync.js';
 import * as program from './program.js';
 import { getExercise, alternativesFor } from './exercises.js';
 import { lineChart, barChart, gauge, progressBar } from './charts.js';
@@ -929,6 +930,7 @@ function renderSettings() {
           </div>
         </details>
       </div>
+      ${museCardHtml()}
       <div class="card">
         <div class="lbl">Data</div>
         <button class="btn-ghost wide" data-act="export">⬇ Export backup (.json)</button>
@@ -940,6 +942,37 @@ function renderSettings() {
       <div class="card muted small">Forge v${store.VERSION} · auto-updates when online · not medical advice. Built for the New Christendom Press Games.</div>
     </main>`;
 }
+// Muse sync — lets the operator's assistant read the plan, workouts and numbers (read-only).
+function museCardHtml() {
+  const c = store.getSync();
+  let status;
+  if (!c.key) status = '<div class="muted small">Off — everything stays on this phone. Connect to let Muse read your plan, workouts and numbers.</div>';
+  else if (c.lastError) status = `<div class="sync-status err">⚠ ${esc(c.lastError)}</div>`;
+  else status = `<div class="sync-status ok">✓ Connected${c.lastSyncISO ? ` · last synced ${esc(timeAgo(c.lastSyncISO))}` : ' · syncing…'}</div>`;
+  const ctl = c.key
+    ? '<div class="row sync-btns"><button class="btn-ghost" data-act="sync-now">Sync now</button><button class="btn-ghost" data-act="sync-off">Disconnect</button></div>'
+    : '<div class="paste-line"><input id="sync-key" type="password" autocomplete="off" placeholder="Paste your sync key"><button class="btn-ghost" data-act="sync-connect">Connect</button></div>';
+  return `<div class="card">
+    <div class="lbl">Muse sync</div>
+    ${status}
+    ${ctl}
+    <div class="muted small">After each workout Forge sends your data to your private ncp-forge server, and Muse reads it from there (read-only). Works offline — it catches up when you're back online.</div>
+  </div>`;
+}
+function timeAgo(iso) {
+  const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m} min ago`;
+  if (m < 1440) return `${Math.round(m / 60)} h ago`;
+  return fmtDate(iso);
+}
+async function syncNow() {
+  toast('Syncing…');
+  const r = await sync.push(true);
+  render();
+  toast(r.message);
+}
+
 // Set this to your real life, not your best intentions — it's what stops the plan stalling.
 function weekTargetNote(s) {
   const st = engine.scheduleStatus(s);
@@ -1052,6 +1085,19 @@ function onClick(e) {
     case 'clear-tweak': store.removeTweak(t.dataset.area); render(); toast('Cleared — back in the plan.'); break;
     case 'clear-pref': store.clearExPref(t.dataset.id); render(); toast('Reverted to the plan default.'); break;
     case 'reset': doReset(); break;
+    case 'sync-connect': {
+      const el = document.getElementById('sync-key');
+      const key = el ? el.value.trim() : '';
+      if (!key) { toast('Paste your sync key first.'); break; }
+      store.setSync({ key, lastHash: null, lastError: null });
+      syncNow();
+      break;
+    }
+    case 'sync-now': syncNow(); break;
+    case 'sync-off':
+      if (!confirm('Stop sending data to Muse? What is already synced stays in the cloud.')) break;
+      store.setSync(null); render(); toast('Muse sync is off.');
+      break;
   }
 }
 function onInput(e) {

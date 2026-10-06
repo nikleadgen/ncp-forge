@@ -37,7 +37,10 @@ latest version when you open it online, and auto-reloads if a new version went l
 The current version is shown at the bottom of Settings.
 
 ## Your data
-- Everything lives in your browser on your device (`localStorage`). No accounts, no servers, no tracking.
+- Everything lives in your browser on your device (`localStorage`). No accounts, no tracking.
+- **Optional Muse sync** (Settings → Muse sync): pushes your data to your own private Cloudflare
+  Worker so your assistant can read it (read-only API + MCP). Off until you add a key — see
+  `docs/CONNECT-MUSE.md`.
 - **Back up anytime:** Settings → Export (downloads a `.json`). Restore with Import.
 
 ## Tech

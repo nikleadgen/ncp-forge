@@ -13,3 +13,9 @@
 .idea/
 *.swp
 *~
+
+# ncp-forge worker — local secrets + wrangler state (keys never go in this public repo)
+worker/.dev.vars
+.wrangler/
+worker/.wrangler/
+*.local.md

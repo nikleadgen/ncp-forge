@@ -2,6 +2,20 @@
 
 All notable changes to Forge (NCP Games Trainer).
 
+## [0.9.0] — 2026-10-05 — Muse sync: an API + MCP server for your assistant (user request)
+- New Cloudflare Worker **`ncp-forge`** (`worker/`) so Muse can read Forge: a read-only HTTPS API
+  (`/v1/today`, `/week`, `/plan`, `/workouts`, `/strength`, `/lift`, `/body`, `/state`) and the same
+  queries as an **MCP server** (`/mcp`, 7 tools). Plan answers run Forge's own engine, so Muse sees
+  exactly what the app shows — every load filled in from current maxes and today's readiness.
+- **Settings → Muse sync**: paste your sync key once. Forge pushes after anything worth keeping
+  (finished workout, readiness, body log, settings) — not on every set tap — and catches up after
+  being offline. The key is stored outside your training data, so it's never in an export.
+- Never-lose-a-workout guard: the cloud refuses a push with fewer workouts than it already holds (a
+  fresh install can't wipe it); a daily snapshot is kept for 30 days as a free extra backup.
+- Two keys (write for the phone, read-only for Muse), stored as worker secrets; the operator's
+  copies are in the gitignored `MUSE-ACCESS.local.md`. Hand-rolled MCP (JSON-RPC over HTTP) — still
+  zero dependencies. No schema change. SW cache → forge-v14.
+
 ## [0.8.1] — 2026-10-02 — Smarter set-to-set + reorder your lifts (user request)
 - **Reorder before Start**: in Pick your lifts, tap **⇅ Reorder** and move lifts with ↑ ↓ (✕ removes).
 - **Set-to-set steering rebuilt.** Each logged set compares reps done + reps left against the plan

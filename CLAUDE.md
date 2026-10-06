@@ -32,8 +32,11 @@ as YOURS below, don't read, write, move, or delete it.
 - The `Fitness Training/` project directory.
 - GitHub repo **`nikleadgen/ncp-forge`** (public, static, **no secrets**) → served via **GitHub Pages**
   at `https://nikleadgen.github.io/ncp-forge/`. Push to `main` auto-deploys (`.github/workflows/deploy-pages.yml`).
-- **No other shared fleet resources** — no Cloudflare worker, Notion hub, or HubSpot brand. All user
-  data lives in the browser (`localStorage`) on the operator's device; backups are local JSON files.
+- Cloudflare Worker **`ncp-forge`** (`https://ncp-forge.nik-leadgen.workers.dev`, code in `worker/`) +
+  KV namespace **`ncp-forge`** (binding `FORGE`). Added 2026-10-05 at the operator's request so his
+  assistant **Muse** can read Forge's plan + data (read-only API `/v1/*` and MCP `/mcp`). The phone
+  stays the source of truth: it pushes its state after changes (`js/sync.js`, opt-in via a key).
+- No Notion hub or HubSpot brand. Backups are local JSON files (the KV copy is a second one).
 
 **Never touch:** the NextRoll Notion teamspace; any other business's repo, worker, store, Notion hub,
 or HubSpot brand. If hosting is ever added, name the worker `ncp-forge` (the Naming Law).
@@ -67,7 +70,8 @@ workout → log a number → done.
 - Never lose a single logged workout.
 
 **Out of scope (explicitly NOT this project):**
-- No backend, accounts, or cloud sync (unless the operator later opts in).
+- No accounts or two-way cloud sync. The only backend is the opt-in, one-way `ncp-forge` push for
+  Muse (operator opted in 2026-10-05); the app must keep working fully without it.
 - Not a multi-user / general-public fitness product. One athlete.
 - Not medical advice or diagnosis. Surfaces a safety disclaimer; honors injury flags.
 
@@ -117,7 +121,11 @@ Fitness Training/
     engine.js             # autoregulation: today's prescription from plan + history + readiness
     ui.js                 # views + interactions (Today, Workout, Progress, Plan, Settings)
     charts.js             # inline-SVG progress charts
+    sync.js               # opt-in push of state to the ncp-forge worker (for Muse)
     app.js                # bootstrap, routing, onboarding, SW registration
+  worker/
+    index.js              # ncp-forge: /v1/sync (phone push), read API /v1/*, MCP /mcp — reuses ../js
+    wrangler.jsonc        # deploy: npx wrangler@4 deploy --config worker/wrangler.jsonc
   docs/
     PROGRAM-SCIENCE.md    # evidence + citations behind every training decision
     PROGRAM-OVERVIEW.md   # human-readable 12-month plan
@@ -127,7 +135,14 @@ Fitness Training/
 
 ## Credentials & Secrets
 
-None. The app holds no secrets and makes no authenticated calls. Do not introduce any.
+Two keys, both **worker secrets** (`wrangler secret put`), never in this public repo:
+- `WRITE_KEY` — the phone's push key. Stored on the device in `localStorage['forge_sync']`, which is
+  deliberately outside the main state so it never lands in a backup export or in the pushed data.
+- `READ_KEY` — Muse's read-only key.
+
+The operator's copies live in `MUSE-ACCESS.local.md` (gitignored, `*.local.md`). Local dev uses
+`worker/.dev.vars` (gitignored). Never print a real key in chat or commit one. Rotation command in
+`docs/CONNECT-MUSE.md`.
 
 ---
 
